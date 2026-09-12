@@ -15,6 +15,8 @@ _FIRST_BODY_LANDMARK = 11
 _LIMB_COLOR = (30, 30, 220)      # BGR red
 _LIMB_THICKNESS = 5
 
+_EQUIPMENT_BOX_COLOR = (72, 112, 237)   # BGR orange (brand accent #ed7048)
+
 _ANGLE_JOINTS = {
     'left_elbow':  LM['left_elbow'],
     'right_elbow': LM['right_elbow'],
@@ -52,6 +54,16 @@ def draw_angles(frame, landmarks, angles):
         x, y = int(landmarks[idx][0]), int(landmarks[idx][1])
         cv2.putText(frame, f'{int(angles[name])}°', (x - 20, y - 12),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+
+
+def draw_equipment_boxes(frame, detections):
+    """Draw bounding boxes + labels for detected gym equipment (YOLO-World)."""
+    for label, confidence, (x, y, w, h) in detections:
+        cv2.rectangle(frame, (x, y), (x + w, y + h), _EQUIPMENT_BOX_COLOR, 2)
+        text = f'{label} {int(confidence * 100)}%'
+        text_y = y - 10 if y - 10 > 14 else y + 20
+        cv2.putText(frame, text, (x, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, _EQUIPMENT_BOX_COLOR, 2)
 
 
 def draw_feedback(frame, exercise_name, feedback_messages):
