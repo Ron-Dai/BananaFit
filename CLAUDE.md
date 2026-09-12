@@ -11,7 +11,7 @@ A gym assistant app that uses computer vision to analyze workout posture in real
 - Real-time posture recognition via MediaPipe
 - Simultaneous professional coaching advice
 
-Equipment recognition and the routine planner are not implemented yet — current code covers pose detection, exercise classification, and per-exercise feedback only.
+The routine planner is not implemented yet. Equipment recognition exists (`equipment/`) but is not wired into `main.py` and needs model files placed manually before it will run at all (see Running the App).
 
 ## Tech Stack
 
@@ -27,11 +27,14 @@ main.py                       # Entry point: camera loop + orchestration
 pose/
 ├── detector.py                # MediaPipe Tasks API wrapper — landmark extraction, auto-downloads model
 ├── analyzer.py                 # LM landmark-index map + compute_key_angles() (joint angle calculations)
-└── feedback.py                 # Generic rule-based coaching text, used for non-curl exercises
+└── feedback.py                 # Generic rule-based coaching text — NOT currently wired into main.py
 exercises/
 ├── registry.py                 # EXERCISES dict: muscles, description, key_joints per exercise
-├── classifier.py                # classify_exercise() — geometric heuristics, no ML model yet
+├── classifier.py                # classify_exercise() — geometric heuristics, NOT currently wired into main.py
 └── curl_tracker.py              # CurlTracker — per-rep counting + form scoring, bicep curl only
+equipment/
+├── registry.py                 # EQUIPMENT dict + DETECTOR_CLASS_TO_TAG proxy mapping (see below)
+└── recognizer.py                # EquipmentRecognizer — COCO-trained SSD MobileNetV2 via cv2.dnn, NOT wired into main.py
 utils/
 └── drawing.py                   # Skeleton/angle overlay + both HUD styles (generic + curl-specific)
 ```
@@ -40,11 +43,16 @@ Key data flow (see `main.py`):
 1. Open webcam, read frames via OpenCV in a loop.
 2. Frame → `pose/detector.py` `PoseDetector.detect()` + `get_landmarks()` → `(33, 4)` float32 array `[x_px, y_px, z_px, visibility]`, or `None` if no person detected.
 3. Landmarks → `pose/analyzer.py` `compute_key_angles()` → dict of joint-name → angle in degrees (elbows, knees, hips, L/R).
-4. Landmarks + angles → `exercises/classifier.py` `classify_exercise()` → `'squat' | 'bicep_curl' | 'pushup' | 'unknown'`.
-5. Branch on exercise:
-   - **`bicep_curl`**: `exercises/curl_tracker.py` `CurlTracker.update()` drives a per-arm phase state machine (`extended` ↔ `active`) that counts reps and scores each rep's form (shoulder-shrug check, elbow-drift check). `utils/drawing.py` `draw_curl_hud()` renders rep count, last-rep score, and a form-status badge; skeleton color reflects live form status.
-   - **anything else**: `CurlTracker` is discarded and recreated (rep/phase state does not persist across an exercise switch), and `pose/feedback.py` `get_feedback()` returns generic coaching messages rendered by `draw_feedback()`.
-6. `draw_skeleton()` / `draw_angles()` overlay the pose skeleton and joint-angle labels every frame regardless of branch.
+4. Landmarks + angles → `exercises/curl_tracker.py` `CurlTracker.update()`, which drives a per-arm phase state machine (`extended` ↔ `active`), counts reps, and scores each rep's form (shoulder-shrug check, elbow-drift check).
+   - An arm is only counted while it is **in frame and awake**. All three of shoulder/elbow/wrist must clear `_MIN_VISIBILITY` (the elbow angle is meaningless otherwise — MediaPipe reports off-screen joints as low-visibility guesses, which produced phantom reps), and an arm that hangs extended for `_REST_FRAMES` stands down until a bend sustained over `_WAKE_FRAMES` wakes it. Both paths go through `_stand_down()`, which abandons any rep in progress.
+5. `utils/drawing.py` renders `draw_skeleton()` (colored by live form status), `draw_angles()`, and `draw_curl_hud()` (rep count, last-rep score, form badge, warnings).
+
+**The app is bicep-curl-only right now.** `exercises/classifier.py` and `pose/feedback.py` (plus `draw_feedback()` in `utils/drawing.py`) are complete and tested but deliberately *not* imported by `main.py`: classification misfires mid-set used to switch modes and discard the rep count. Re-wiring them means restoring the per-exercise branch in `main.py` — and giving each exercise its own tracker so a mode switch no longer resets state.
+
+**Equipment recognition (`equipment/`) is implemented but standalone** — not imported by `main.py`, and a different architecture from the pose pipeline:
+- `EquipmentRecognizer` (`recognizer.py`) wraps a COCO-trained SSD MobileNetV2 (`cv2.dnn_DetectionModel`), not MediaPipe. Unlike `pose/detector.py`'s model, its two model files (`frozen_inference_graph.pb`, `ssd_mobilenet_v2_coco_2018_03_29.pbtxt`) are **not auto-downloaded** — there's no single URL pinned with enough confidence to fetch silently, so the constructor raises `FileNotFoundError` with manual-download instructions if they're missing from `equipment/`.
+- COCO has no gym-equipment classes. `equipment/registry.py`'s `DETECTOR_CLASS_TO_TAG` maps only the few COCO classes with any real-world resemblance to gym equipment (e.g. COCO `'bench'`, a park bench, standing in for a weight bench) — everything else resolves to `'unknown'`. Treat this mapping as a placeholder, not a real classifier; the eventual fix is a model trained on actual gym equipment, not more COCO proxies.
+- `scan()` returns `(tag, confidence, box)` per recognized detection; `best_tag()` and `describe()` are the convenience entry points for a single-shot lookup.
 
 `CurlTracker`'s per-arm phase state machine (`_ArmTracker` in `curl_tracker.py`) is the pattern to follow when adding rep-counting/form-scoring for other exercises (e.g. squat, pushup) — a generic exercise doesn't get this treatment through `exercises/registry.py` alone; it needs its own tracker class and a dedicated branch in `main.py` plus a HUD renderer in `utils/drawing.py`.
 
@@ -60,6 +68,8 @@ python main.py
 ```
 
 > **Note:** MediaPipe 1.0+ dropped the `solutions` API. This project uses the Tasks API (`mp.tasks.vision.PoseLandmarker`). The model file (`pose/pose_landmarker.task`) is downloaded automatically on first run.
+
+`equipment/recognizer.py` is unrelated to this pipeline and not imported by `main.py`; it needs `frozen_inference_graph.pb` and `ssd_mobilenet_v2_coco_2018_03_29.pbtxt` placed manually in `equipment/` before `EquipmentRecognizer()` will construct (see the Architecture section above for why this one isn't auto-downloaded).
 
 ## Key Conventions
 

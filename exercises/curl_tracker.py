@@ -1,11 +1,21 @@
 import numpy as np
 from pose.analyzer import LM
 
-_DOWN_ANGLE = 160   # elbow angle (deg) — arm considered extended / at bottom
-_UP_ANGLE   = 70    # elbow angle (deg) — arm considered fully curled / at top
+_DOWN_ANGLE = 150   # elbow angle (deg) — arm considered extended / at bottom
+_UP_ANGLE   = 50    # elbow angle (deg) — arm considered fully curled / at top
 
 _MAX_SHOULDER_RISE_PX = 25   # pixels shoulder can rise before "shrug" warning
 _MAX_ELBOW_DRIFT_DEG  = 25   # degrees upper-arm can drift before "swing" warning
+
+# Two arms finishing within this many frames are one two-armed rep, not two reps.
+# Wide enough to absorb the lag between arms in a simultaneous curl, short enough
+# that alternating curls (seconds apart) still count separately.
+_REP_MERGE_FRAMES = 5
+
+_MIN_VISIBILITY = 0.5   # below this a landmark is treated as out of frame
+
+_REST_FRAMES = 30   # extended, non-curling frames before an arm counts as at rest
+_WAKE_FRAMES = 3    # consecutive bent frames needed to bring a resting arm back
 
 
 class _ArmTracker:
@@ -16,39 +26,77 @@ class _ArmTracker:
         self._e_key = f'{side}_elbow'
         self._s_idx = LM[f'{side}_shoulder']
         self._e_idx = LM[f'{side}_elbow']
+        self._w_idx = LM[f'{side}_wrist']
 
         self.phase          = 'extended'   # 'extended' | 'active'
-        self.rep_count      = 0
         self.last_rep_score = None
         self.rep_scores     = []
+        self.rep_completed  = False        # True only on the frame a rep finishes
         self.warnings       = []
         self.is_good_form   = True
+
+        self.in_frame       = False        # all three arm landmarks visible this frame
+        self.at_rest        = True         # not counting until a sustained curl wakes it
 
         self._hit_top       = False
         self._rep_good      = 0
         self._rep_total     = 0
         self._shoulder_y0   = None
         self._arm_dir_base  = None
+        self._idle_frames   = 0
+        self._bent_frames   = 0
+
+    def _stand_down(self):
+        """Stop counting this arm and abandon any rep in progress."""
+        self.at_rest       = True
+        self.phase         = 'extended'
+        self._hit_top      = False
+        self._rep_good     = 0
+        self._rep_total    = 0
+        self._shoulder_y0  = None
+        self._arm_dir_base = None
+        self._idle_frames  = 0
+        self._bent_frames  = 0
 
     def update(self, landmarks, angles):
         """Advance this arm's rep phase from the current frame and score form if mid-rep."""
-        self.warnings     = []
-        self.is_good_form = True
+        self.warnings      = []
+        self.is_good_form  = True
+        self.rep_completed = False
 
         if landmarks is None or self._e_key not in angles:
+            self.in_frame = False
+            self._stand_down()
             return
 
-        angle    = angles[self._e_key]
         shoulder = landmarks[self._s_idx]
         elbow    = landmarks[self._e_idx]
+        wrist    = landmarks[self._w_idx]
 
-        # Skip frames where key landmarks are low-confidence
-        if shoulder[3] < 0.5 or elbow[3] < 0.5:
+        # The elbow angle is shoulder-elbow-wrist, so all three have to be visible for
+        # it to mean anything. MediaPipe still reports off-screen joints — it just marks
+        # them low-visibility — and using those yields a garbage angle that fakes reps.
+        if min(shoulder[3], elbow[3], wrist[3]) < _MIN_VISIBILITY:
+            self.in_frame = False
+            self._stand_down()
             return
 
+        self.in_frame = True
+        angle = angles[self._e_key]
+        bent  = angle < _DOWN_ANGLE
+
+        if self.at_rest:
+            # Wake only on a sustained bend, so one glitched frame on an arm that is
+            # just hanging there (or re-entering frame) cannot start a phantom rep.
+            self._bent_frames = self._bent_frames + 1 if bent else 0
+            if self._bent_frames < _WAKE_FRAMES:
+                return
+            self.at_rest = False
+
         if self.phase == 'extended':
-            if angle < _DOWN_ANGLE:
+            if bent:
                 # Rep started — record baselines
+                self._idle_frames  = 0
                 self.phase         = 'active'
                 self._hit_top      = False
                 self._rep_good     = 0
@@ -56,6 +104,10 @@ class _ArmTracker:
                 self._shoulder_y0  = float(shoulder[1])
                 arm_vec = elbow[:2] - shoulder[:2]
                 self._arm_dir_base = arm_vec / (np.linalg.norm(arm_vec) + 1e-6)
+            else:
+                self._idle_frames += 1
+                if self._idle_frames >= _REST_FRAMES:
+                    self._stand_down()
 
         elif self.phase == 'active':
             if angle < _UP_ANGLE:
@@ -65,10 +117,10 @@ class _ArmTracker:
                 # Rep complete — score it if the person actually reached the top
                 self.phase = 'extended'
                 if self._hit_top:
-                    self.rep_count += 1
                     score = int(100 * self._rep_good / max(self._rep_total, 1))
                     self.last_rep_score = score
                     self.rep_scores.append(score)
+                    self.rep_completed = True
                 self._shoulder_y0  = None
                 self._arm_dir_base = None
             else:
@@ -113,17 +165,21 @@ class CurlTracker:
         self._left  = _ArmTracker('left')
         self._right = _ArmTracker('right')
 
+        self.rep_count        = 0
+        self._frames_since_rep = _REP_MERGE_FRAMES
+
     def update(self, landmarks, angles):
-        """Update both arms' trackers with the current frame's landmarks and angles."""
+        """Update both arms, counting a simultaneous two-arm curl as a single rep."""
         self._left.update(landmarks, angles)
         self._right.update(landmarks, angles)
 
-    # --- aggregated properties --------------------------------------------------
+        self._frames_since_rep += 1
+        if self._left.rep_completed or self._right.rep_completed:
+            if self._frames_since_rep >= _REP_MERGE_FRAMES:
+                self.rep_count += 1
+            self._frames_since_rep = 0
 
-    @property
-    def rep_count(self):
-        """Total completed reps across both arms."""
-        return self._left.rep_count + self._right.rep_count
+    # --- aggregated properties --------------------------------------------------
 
     @property
     def warnings(self):
