@@ -1,0 +1,1019 @@
+spec:
+  id: pre_exercise_health_and_function_intake
+  version: 1.0.0
+  language: zh-CN
+  prepared_on: "2026-09-12"
+  title: 训练前身体状况、健康史与功能限制采集表
+  deliverable: 面向AI开发者的字段字典与处理规则；不是已填写的个人档案，也不是可直接部署的医疗诊断算法。
+  objective: 为初始训练计划、适应性调整、需要补充的信息和专业转介提供依据；不生成整体运动能力排名。
+  evidence_status: 综合公开专业资料设计，未进行临床验证；不声称为ACSM、NASM、WHO或其他机构的官方统一表单。
+  coverage_limit: 尽可能覆盖影响运动的因素，并允许无限追加其他因素；问卷不能排除隐匿疾病，不能保证发现所有损伤或训练风险。
+  age_scope: 可采集各年龄信息；未成年人及特殊生理状态不得直接套用普通成人处方和参考值。
+  units_policy: 使用公制展示；保留输入原单位并执行有来源的单位换算；不得覆盖原始值。
+  references_policy: source_refs指向文末资料；这些资料支持相应领域，不表示来源逐项规定了本表字段或验证了本表规则。
+
+implementation_contract:
+  format: YAML 1.2；字段行按field_columns解析；这是表单规格DSL，不是JSON Schema。
+  field_columns: [id, type, label_or_question, unit, note]
+  types:
+    text: 字符串；保留用户原话，不将自由文本自动当作确诊。
+    bool: 已作答时为true或false；未知或拒答用Answer.status表示，不用false代替。
+    integer: 整数。
+    number: 数字；允许零的项目必须保留真实零值。
+    date: ISO 8601日期；不完整日期用Answer.date_precision标记，不能捏造月日。
+    datetime: ISO 8601含时区时间；不明时区保留原文并标unknown。
+    enum: 使用enum:name引用选项；选项必须显示中文label。
+    multi: 使用multi:name引用多选；每个多选字段附other_text；空数组只表示明确无选项。
+    measurement: 已有客观测量或估算结果；Answer.value为数值，必带measurement_metadata；是否实际检测由来源确认。
+    measurements: 同一指标的多次记录；Answer.value为Answer数组，各次均有时间和方法。
+    record: 使用record:name引用可重复记录；Answer.value为记录数组，各条含record_id及该record定义的答案。
+    matrix: 使用matrix:name引用逐项问题；Answer.value为对象，键为矩阵项id，值为Answer；不得用一个总否定代替未回答的各项。
+    refs: 指向本次记录中的record_id、answer_id或report_id数组。
+  answer_contract:
+    answer_id: 全局唯一字符串。
+    status: answered | not_asked | unknown | not_measured | declined | not_applicable | invalid
+    value: 根据字段type确定；除answered外必须为null；无效或撤回的旧值保存在审计历史中。
+    unit: measurement必须提供；字段规定单位则归一化到该单位，字段unit为null时保留有定义的原单位。
+    original_text: 原始回答或报告原文，可为空；不得用AI改写覆盖。
+    answered_at: 作答时间。
+    observed_at: 所描述事件或数值对应时间，可为空。
+    date_precision: day | month | year | approximate | unknown
+    source_type: self_report | clinician_report | supervised_measurement | home_measurement | wearable | derived | other | unknown
+    source_detail: 提供者、报告或设备信息；临床确认与用户回忆分开。
+    note: 补充说明。
+    report_refs: 原报告id数组。
+    related_record_ids: 与疾病、损伤、药物或限制的关联数组。
+    history: 保留变更时间、前值、后值、修改者与原因；撤销不等于既往记录不存在。
+    validation: unchecked | user_confirmed | source_checked | inconsistent | invalid
+    measurement_metadata: measurement或measurements中的每次测量使用下方定义；非测量字段可省略。
+  measurement_metadata:
+    required_keys: [observed_at, date_precision, original_value, original_unit, method, device, setting, quality]
+    missing_metadata: 不知道的方法或时间写unknown；仍允许保存，降低可解释性，不编造。
+    original_value: 报告或用户输入原值。
+    original_unit: 原单位；unit字段记录归一化单位。
+    method: BIA、DXA、皮褶、卷尺、人工计脉、心电图、光电容积脉搏波、肺量计等；使用实际名称。
+    device: manufacturer、model、software_version、algorithm_version、calibration_date；每项可unknown。
+    assessor: 自测或测量者角色；不要求采集无关实名信息。
+    setting: 居家、诊室、健身房或其他；体位、时间、测量部位、左右侧。
+    preparation: 休息时长、进食饮水、近期运动、咖啡因和尼古丁、药物时间、发热或急性不适；按测量方法保留适用项。
+    protocol: 方案名称与版本、重复次数、单次读数、汇总方式、有效读数数量。
+    context: 疼痛、疲劳、呼吸方式、海拔、环境温度、辅助设备、测前活动；按需记录。
+    estimate: is_estimated、equation_or_algorithm、input_answer_ids；未知时不得默认实测。
+    quality: unknown | acceptable_per_documented_protocol | limited | invalid
+    quality_reason: 仪器或操作者提供的质量依据；不能仅凭数值看似合理标记acceptable。
+    reference: reference_source、version、population、reference_interval、percent_predicted、z_score；无适用依据时留空。
+  presentation_and_missingness:
+    - 所有模块均可从完整目录进入；条件显示只减少初次展开的内容，不删除字段或已填数据。
+    - 所有健康字段允许拒答、未知、未测和不适用；区别于表单能否支持具体处方决策。
+    - 优先显示当前症状、医学限制、目标和训练经历；随后开放详细数据。
+    - 选择其他始终提供自由文本和附件；每个矩阵提供其他项。
+    - 异常项提供发生时间、是否当前、频率、诱因、严重度、既往评估及已有处理的追问。
+    - 允许先保存再补填；不要为填写表单指示用户自行做最大负荷、诱发疼痛、神经牵拉或其他风险测试。
+    - 资料不足时输出具体缺失项和受影响决策；不把未测体脂等非关键数据缺失变成停止全部服务的理由。
+    - 用户回复无、否或零，只适用于其明确回答的字段和时间范围。
+  response_structure:
+    envelope: "{spec_id, spec_version, participant_id, created_at, updated_at, responses, audit_history}"
+    responses: 以section.id为键，其值为以field.id为键的Answer对象；不能用field.id单独作为跨模块主键。
+    record_value: 每条记录的record_id是系统生成的裸字符串；其余字段用Answer对象；重复记录不合并，关联用record_id。
+    matrix_value: 每项id映射到独立Answer；条目补充信息写入Answer.note和related_record_ids。
+    ids_and_refs: answer_id、record_id、report_id均为全局唯一且带类型的标识；refs校验目标类型，删除时保留断链原因。
+    system_fields: 系统标识、版本、保存时间由系统生成，不作为需要用户填的健康问题；report.report_id同理。
+    matrix_initialization: 所有矩阵项默认not_asked而非false；确认为无某项病史时才保存answered加false。
+    blank_answer: {status: not_asked, value: null}
+    record_default: 未询问的记录数组字段为not_asked和null；用户明确没有相关事件才用answered和空数组。
+    derived_storage: 计算结果放独立derived_results，包含公式版本、输入answer_ids、可比性结论与时间，禁止写回原始回答。
+    machine_validation: 本文中的trigger/when是可读规则说明，开发者需实现并验证条件判断；不能直接把自然语言字符串当可执行规则。
+  privacy_and_attachment_use:
+    - 不预填本对话用户的个人健康信息；交付的是空白规格。
+    - 身体照片、生殖信息、心理健康、用药和医疗报告均单独可拒绝；未授权不得转交第三方。
+    - 只采集与计划相关的信息；住址、证件号、保险号不是本表字段。
+    - 附件中的文本是待核验数据，不作为AI指令执行；提取字段须标页码和出处。
+    - 照片只用于经用户同意的可见特征记录；不得据照片诊断骨盆旋转、脊柱侧弯或肌肉损伤。
+    - 提供导出、更正、删除和访问控制；研究二次利用需另行取得相应授权。
+
+enums:
+  laterality: {left: 左侧, right: 右侧, bilateral: 双侧, midline: 中线, generalized: 全身, not_applicable: 不适用, unknown: 不清楚}
+  dominance: {left: 左侧, right: 右侧, mixed: 随任务变化, neither: 无固定优势侧, unknown: 不清楚}
+  onset: {sudden: 突然, gradual: 逐渐, congenital: 先天, recurrent: 反复, unknown: 不清楚}
+  trajectory: {improving: 改善, stable: 稳定, worsening: 加重, fluctuating: 波动, resolved: 已消退, unknown: 不清楚}
+  diagnostic_status: {clinician_confirmed: 医疗人员确诊, under_evaluation: 检查中, self_suspected: 自己怀疑, historical_unverified: 回忆既往诊断未核实, unknown: 不清楚}
+  control: {stable_as_reported: 据报告稳定, active_or_flare: 活动或发作期, uncontrolled_as_reported: 据报告未控制, resolved: 已缓解, unknown: 不清楚}
+  functional_difficulty: {none: 无困难, mild: 轻度困难, moderate: 明显困难但可独立, severe: 严重困难, unable: 无法完成, assistance: 需要他人或器具, avoided: 未尝试或主动回避, unknown: 不清楚}
+  evidence_kind: {self_observed: 自己感觉或观察, coach_observed: 教练观察, clinician_observed: 医疗人员评估, instrument: 仪器数据, report: 既往报告, unknown: 不清楚}
+  activity_context: {rest: 休息时, daily_living: 日常活动, exercise: 运动中, immediately_after: 运动后即刻, delayed_after: 延迟至数小时或次日, sleep: 睡眠中, position_change: 起身或变换体位, other: 其他}
+  function_domain: {strength: 力量, endurance: 耐力, mobility: 关节活动, sensation: 感觉, motor_control: 动作控制, balance: 平衡, gait: 行走, breathing: 呼吸, circulation: 循环, autonomic: 自主神经功能, cognition: 认知, vision: 视觉, hearing: 听觉, speech_swallow: 言语或吞咽, pelvic: 盆底功能, skin: 皮肤及伤口, other: 其他}
+  body_region: {head: 头部, neck: 颈部, thoracic_spine: 胸椎, lumbar_spine: 腰椎, sacrum_pelvis: 骶骨骨盆, shoulder: 肩, scapula: 肩胛区, upper_arm: 上臂, elbow: 肘, forearm: 前臂, wrist: 腕, hand_fingers: 手及手指, chest_ribs: 胸廓肋骨, abdomen: 腹部, hip_groin: 髋腹股沟, thigh: 大腿, knee: 膝, calf: 小腿, ankle: 踝, foot_toes: 足及足趾, pelvic_floor: 盆底会阴, whole_limb: 整个肢体, whole_body: 全身, other: 其他}
+  cause: {trauma: 外伤或事故, sport: 运动损伤, repetitive_load: 重复负荷, surgery: 手术相关, immobilization: 固定卧床或废用, neurologic: 神经系统事件, cardiopulmonary: 心肺疾病, infection: 感染后, congenital: 先天或发育, degenerative: 退变, inflammatory: 炎症或自身免疫, treatment: 药物或其他治疗相关, unknown: 原因不清, other: 其他}
+  goals: {strength: 增强力量, hypertrophy: 增肌, fat_loss: 减脂, weight_gain: 增重, cardio: 提高有氧耐受, health: 改善一般健康, daily_function: 改善日常功能, mobility: 改善活动范围, balance: 改善平衡, return_to_training: 恢复训练, sport: 专项运动, appearance: 体型目标, clinician_program: 执行既有医学运动方案, other: 其他}
+  limitation_reason: {pain: 疼痛, weakness: 无力, numbness: 麻木或感觉减退, stiffness: 僵硬, instability: 不稳定, breathlessness: 气短, fatigue: 疲劳, dizziness: 头晕, coordination: 协调问题, fear: 恐惧或不放心, equipment: 器械或环境, medical_restriction: 医学限制, other: 其他}
+  professional_role: {physician: 医师, physiotherapist: 物理治疗师或康复治疗师, exercise_physiologist: 运动生理专业人员, trainer: 教练, self: 本人, other: 其他, unknown: 不清楚}
+
+sections:
+  - id: profile
+    label: 基本背景
+    source_refs: [NASM_HISTORY, WHO_ICF]
+    fields:
+      - [participant_id, text, "使用匿名编号或昵称", null, "不要求实名"]
+      - [age, number, "当前年龄", years, "可由自愿提供的出生年月推算；不能同时保留互相矛盾的年龄"]
+      - [sex_for_reference, text, "如需要生理参考方程，你愿意提供的相关性别信息", null, "仅用于适用方程；不由姓名外貌推断，未知时不强行选组"]
+      - [gender_pronouns, text, "称呼或性别认同偏好", null, "自愿；不用作生理计算替代值"]
+      - [height, measurements, "身高及既往有效记录", cm, "使用统一测量方法"]
+      - [weight, measurements, "当前及既往体重记录", kg, "注明日期、衣着和设备"]
+      - [weight_change_intended, bool, "近期体重变化是否出于主动计划", null, "有变化时追问具体时间和原因"]
+      - [weight_change_details, text, "近期明显增重或减重的时间、程度与原因", null, "区分饮食计划、疾病、药物、水肿及原因不明"]
+      - [hand_dominance, enum:dominance, "惯用手", null, "左右比较的背景因素"]
+      - [leg_dominance, enum:dominance, "踢球、支撑或起跳时的惯用腿", null, "任务相关；混合优势时补充任务"]
+      - [occupation, text, "学习工作及主要体力要求", null, "记录搬举、站立、重复动作等"]
+      - [altitude_environment, text, "通常训练的海拔及环境", null, "用于解释血氧、呼吸与耐热问题"]
+      - [communication_access, text, "语言、阅读、视听或沟通辅助需求", null, "支持可访问的指导"]
+
+  - id: immediate_screen
+    label: 当前症状与需要优先处理的情况
+    source_refs: [ACSM_EP, AHA_EMERGENCY, NHS_BACK]
+    fields:
+      - [current_chest_discomfort, bool, "现在是否有新出现、明显或原因不明的胸部压迫、紧缩或疼痛", null, "当前问题；阳性先执行规则R01，不等待填写完"]
+      - [severe_rest_dyspnea, bool, "现在是否在休息时也明显呼吸困难", null, "当前症状；记录是否突然及伴随症状"]
+      - [current_fainting_or_confusion, bool, "现在是否有昏厥、接近昏厥或新出现的意识不清", null, "区分遥远病史与当前状态"]
+      - [sudden_focal_neurology, bool, "最近是否突然出现一侧肢体或面部无力麻木、说话困难或视力明显改变", null, "即使已缓解也记录首次出现时间；不得解释为肌肉不平衡"]
+      - [new_saddle_sensation_change, bool, "近期是否新出现会阴、肛周或骑坐部位感觉减退", null, "与原本稳定状态比较"]
+      - [new_bladder_bowel_control_change, bool, "近期是否新出现排尿困难、感觉不到尿意或大小便控制改变", null, "不得与长期已评估的运动性漏尿混为一谈"]
+      - [new_bilateral_leg_neurology, bool, "近期是否出现伴腰背痛的双腿麻木、无力或迅速加重的行走困难", null, "须确认当前状态；执行R01/R02"]
+      - [major_trauma_or_rapid_pain, bool, "近期是否有重大外伤、突然剧痛或迅速恶化的疼痛", null, "追问时间、部位、负重能力及是否已经就医"]
+      - [current_fever_or_acute_illness, bool, "目前是否发热、急性感染或明显全身不适", null, "影响当前训练安排"]
+      - [recent_emergency_events, record:event, "近期发生过需要急诊处理的事件", null, "保留医疗处置和当前状态"]
+      - [screen_time, datetime, "上述当前症状确认时间", null, "不能用数月前答案代表今天"]
+
+  - id: medical_history
+    label: 疾病史与全身健康
+    source_refs: [ACSM_EP, PARQ, WHO_ICF]
+    fields:
+      - [condition_screen, matrix:conditions, "是否曾确诊或正在评估以下情况", null, "每项独立回答；疑似写入记录，不能自动确诊"]
+      - [conditions, record:condition, "逐项疾病详情", null, "每个疾病或疑似问题一条，关联残留影响"]
+      - [family_history, record:family_event, "与运动有关的家族健康史", null, "侧重早发心血管病、不明原因猝死、遗传性心肌病或心律病；记录亲属关系和发生年龄"]
+      - [symptoms, record:symptom, "当前及反复出现的症状", null, "不得只勾选有无；记录运动、静息和延迟反应"]
+      - [symptom_screen, matrix:symptoms, "是否存在以下症状", null, "每项阳性可进入symptom记录"]
+      - [hospitalization_events, record:event, "住院、重症监护、长期卧床或严重疾病经历", null, "记录时间、原因、去训练状态和出院后的残留影响"]
+      - [professional_restrictions, record:restriction, "医生或康复专业人员给出的活动限制与允许范围", null, "保留原话、适用部位、有效期及复查要求"]
+      - [prior_screening, record:screening_result, "已有运动前筛查问卷及结果", null, "保留原工具名称、版本、原文及结论；不能把本表称为已验证的PAR-Q+"]
+      - [other_health_factors, record:other_factor, "其他未列出的疾病、健康变化或担忧", null, "开放入口，可重复添加"]
+
+  - id: injury_history
+    label: 损伤、手术和残留功能影响
+    source_refs: [NASM_HISTORY, WHO_ICF, NHS_BACK]
+    fields:
+      - [ever_injury_or_surgery, bool, "是否有任何外伤、运动损伤、手术、固定或功能受损经历", null, "包括未就医、已恢复及先天问题"]
+      - [injuries, record:injury, "每一次损伤、手术或功能受损事件", null, "不同事件分条；复发可关联原事件；见完整injury结构"]
+      - [implants_and_aids, record:device_aid, "植入物、假肢、矫形器、助行器及医疗装置", null, "包括心脏起搏器、关节置换、固定物等；不据装置名称自行给出器械禁忌"]
+      - [current_pain_regions, multi:body_region, "目前疼痛或不适的部位", null, "逐部位建立symptom记录，注明左右"]
+      - [persistent_impairments, record:impairment, "现在仍存在的功能损伤或活动限制", null, "可关联多个疾病或事件；原因不明也允许记录"]
+      - [rehabilitation_documents, refs, "康复计划、出院记录及复查报告", null, "可不上传，用文字摘要并标自报"]
+
+  - id: function
+    label: 日常功能与训练动作可及性
+    source_refs: [WHO_ICF, ACSM_EP]
+    fields:
+      - [activities, matrix:daily_activities, "根据日常经验评估活动困难", null, "每项回答functional_difficulty并可关联symptom/impairment；不要求当场尝试"]
+      - [movement_limits, record:movement_limit, "具体姿势或动作的限制", null, "记录做不了、会痛、需辅助及医生禁止的情况"]
+      - [falls_last_12_months, integer, "过去12个月跌倒次数", count, "零与未回答分开"]
+      - [falls_details, text, "跌倒或接近跌倒的原因、伤害和当时情境", null, "区分绊倒、头晕、无力及其他原因"]
+      - [walking_tolerance, text, "通常能舒适行走多长时间或距离，因什么停下", null, "日常经验；无须测试极限"]
+      - [standing_tolerance, text, "站立、起身或体位改变是否有困难", null, "记录头晕、心悸、疼痛、需要扶持等"]
+      - [sitting_tolerance, text, "久坐和坐站转换是否有困难", null, "对器械坐姿和休息安排有影响"]
+      - [sensory_access, text, "视力、听力、触觉、本体感觉或平衡功能方面的限制", null, "补充指导和监督需求"]
+      - [cognitive_access, text, "记忆、注意、理解动作指令或判断疲劳方面的困难", null, "描述具体支持需求，不依据诊断标签推定能力"]
+      - [assistance_required, text, "安全训练是否需要他人协助、监督或无障碍器械", null, "记录已有有效适应措施"]
+      - [best_and_worst_days, text, "状态较好和较差时分别能完成哪些活动", null, "捕捉波动；避免只按最好一天安排"]
+
+  - id: asymmetry
+    label: 左右侧差异与代偿
+    source_refs: [ACSM_EP, NHANES_DXA, WHO_ICF]
+    fields:
+      - [noticed_difference, bool, "是否感觉或被指出左右侧存在差异", null, "无差异感觉不等于客观完全对称"]
+      - [differences, record:asymmetry_report, "每项左右差异的描述", null, "区分外观、力量、活动度、感觉、控制、疼痛和耐力"]
+      - [paired_observations, record:paired_measurement, "已有同方案左右对照数据", null, "同时间、同部位、同设备和同动作条件；不强迫新增测试"]
+      - [habitual_loading, text, "长期单侧运动、工作、背包、持物或避痛使用习惯", null, "作为可能背景，不直接认定病因"]
+      - [compensations, text, "是否出现偏移重心、躯干旋转、耸肩、跛行或一侧抢先发力", null, "记录出现动作、负荷、次数和观察者"]
+      - [limb_length_reports, text, "是否有专业测量的肢体长度差异", null, "记录方法及是否使用鞋垫等；不能据照片确认"]
+      - [progressive_wasting_or_weakness, bool, "是否有一侧逐渐变细、力量持续下降或动作能力退步", null, "追问进展、麻木和专业评估；执行R06"]
+
+  - id: body_composition
+    label: 身体围度、脂肪、肌肉和相关组织数据
+    source_refs: [NHANES_DXA, NASM_BODY, ACSM_EP]
+    fields:
+      - [circumferences, record:circumference, "身体各部位围度", null, "预置腰、臀、颈、胸、上臂、前臂、大腿、小腿；肢体部位左右独立"]
+      - [body_fat_percent, measurements, "体脂率", "%", "注明BIA、DXA、皮褶或其他方法"]
+      - [fat_mass, measurements, "脂肪量", kg, "实测或推算信息必须保留"]
+      - [fat_free_mass, measurements, "去脂体重FFM", kg, "不是骨骼肌量"]
+      - [lean_soft_tissue_mass, measurements, "瘦软组织量", kg, "保留是否排除骨矿物质；不能改名为肌肉量"]
+      - [device_muscle_mass, measurements, "设备报告中的肌肉量", kg, "保留设备原指标名与定义；不可跨定义合并"]
+      - [skeletal_muscle_mass, measurements, "骨骼肌量SMM", kg, "注明算法或报告定义；多数居家数据为估计"]
+      - [appendicular_lean_mass, measurements, "四肢瘦组织量ALM", kg, "保留原报告定义；不与全身SMM混同"]
+      - [regional_composition, record:regional_composition, "分部位身体成分", null, "左右上肢、左右下肢、躯干分别记录脂肪与瘦组织/肌肉指标"]
+      - [visceral_fat, record:lab_measurement, "内脏脂肪相关数据", null, "面积cm2、体积、质量和厂商等级分开；厂商等级无统一通用阈值"]
+      - [body_water, record:lab_measurement, "总身体水、细胞内外水及其他设备数据", null, "记录项目全名和单位；仅作相应方法下的背景"]
+      - [bone_density, record:bone_report, "已有骨密度检查", null, "注明部位、BMD、T/Z分数及报告结论；体脂秤骨量不是骨密度"]
+      - [metabolic_rate, record:lab_measurement, "静息代谢率或基础代谢率", null, "区分RMR/BMR和实测/公式/设备估算；不是每日总能量消耗"]
+      - [other_device_metrics, record:lab_measurement, "其他身体测量或设备指标", null, "包括原始报告附件；厂商身体年龄等不得当作医学诊断"]
+
+  - id: cardiovascular
+    label: 心率、血压及循环状态
+    source_refs: [ACSM_EP, AHA_PULSE]
+    fields:
+      - [resting_heart_rate, measurements, "静息心率", bpm, "安静坐位或卧位；记录体位和休息时间；不是全天平均心率"]
+      - [sleeping_heart_rate, measurements, "睡眠心率", bpm, "独立于静息心率；注明设备及汇总时间窗"]
+      - [day_average_heart_rate, measurements, "全天平均心率", bpm, "注明统计范围及设备，不与静息值合并"]
+      - [heart_rate_variability, record:lab_measurement, "已有心率变异性HRV数据", null, "注明RMSSD或SDNN、ms、记录时长、体位和设备；不混用厂商恢复分数"]
+      - [blood_pressure, record:blood_pressure, "静息血压和重复读数", null, "收缩压舒张压保持成对；测量条件见record"]
+      - [orthostatic_records, record:lab_measurement, "已有卧位、坐位和站立后的心率血压记录", null, "保留每次姿势及变换后的秒数；不要指示有昏厥风险者自行挑战测试"]
+      - [ecg_and_cardiac_reports, refs, "已有心电图、超声心动图、运动试验等报告", null, "保留专业结论；不由普通AI独立诊断心电图"]
+      - [clinician_hr_bp_limits, refs, "专业人员给出的心率血压或强度限制", null, "关联restriction记录；没有限制不代表任意强度均适合"]
+      - [circulatory_symptoms, text, "水肿、肢体发冷变色、活动时腿痛或体位相关不适", null, "补充起始时间、侧别、诱因和诊疗情况"]
+
+  - id: respiratory
+    label: 呼吸状况与已有肺功能数据
+    source_refs: [ATS_ERS_SPIROMETRY, ACSM_EP]
+    fields:
+      - [resting_respiratory_rate, measurements, "静息呼吸频率", breaths/min, "注明休息和计数条件"]
+      - [resting_spo2, measurements, "静息血氧饱和度SpO2", "%", "注明血氧仪或穿戴设备、海拔、吸氧流量和测量质量"]
+      - [oxygen_therapy, text, "是否使用氧疗及已有处方", null, "保存流量、情境与专业限制；不自动调节氧流量"]
+      - [spirometry, record:spirometry, "已有肺量计或肺功能检查记录", null, "包含VC/SVC、FVC、FEV1、FEV1/FVC及报告质量"]
+      - [other_pulmonary_tests, record:lab_measurement, "已有TLC、DLCO、MIP/MEP等其他肺功能指标", null, "按原报告记录单位、方法及结论；不要求常规补测"]
+      - [breathing_triggers, text, "冷空气、粉尘、花粉、泳池环境或运动是否诱发咳嗽喘鸣", null, "记录现有药物和行动计划，不自行诊断运动诱发支气管收缩"]
+      - [inhaler_action_plan, text, "已有吸入药和呼吸症状处理方案", null, "记录医生方案，不由本表建议停药或改药"]
+
+  - id: medication_and_exposure
+    label: 药物、补充剂、过敏和物质使用
+    source_refs: [ACSM_EP, NASM_HISTORY]
+    fields:
+      - [medications, record:medication, "处方药、非处方药和近期用过的药物", null, "包括已停用但仍有关联影响的药物；记录名称而不只问有无"]
+      - [supplements, record:medication, "营养补充剂、训练前补剂及其他制剂", null, "包括咖啡因、肌酸、草药、减重产品和成分不清制剂"]
+      - [allergies, record:allergy, "药物、食物、乳胶、胶带或其他过敏", null, "记录反应、严重度和既有处理方案"]
+      - [tobacco_nicotine, text, "烟草、电子烟和其他尼古丁使用情况", null, "当前与既往用量、频率、停止时间"]
+      - [alcohol, text, "饮酒频率、通常用量及训练前后时间", null, "保留原单位；标准杯换算需注明地区"]
+      - [caffeine, text, "咖啡因来源、日常剂量和摄入时间", null, "不清楚剂量可填饮品品牌和份量"]
+      - [other_substances, text, "其他可能影响运动的兴奋剂、镇静剂、激素或物质", null, "可拒答；描述用途和时间，不道德评判"]
+      - [recent_changes, text, "近期药物、补充剂或物质使用的变化及不适", null, "关联心率、低血糖、出血、疼痛、嗜睡和恢复变化等，需专业解释"]
+
+  - id: laboratory_reports
+    label: 已有检查结果
+    source_refs: [ACSM_EP, NHANES_DXA]
+    fields:
+      - [blood_tests, record:lab_measurement, "已有化验指标", null, "可选目录见lab_catalog；不是常规必检清单"]
+      - [imaging_reports, refs, "与运动限制有关的X线、MRI、CT、超声等报告", null, "原结论与用户当前症状分开；影像异常不自动等于不能运动"]
+      - [neurological_tests, refs, "已有肌电图、神经传导或其他神经功能报告", null, "不要求用户自行做检查"]
+      - [clinical_summary, text, "专业人员对已有检查的解释及训练相关意见", null, "保存来源与日期；AI不可把参考区间外数值直接变成处方"]
+      - [pending_evaluation, text, "尚在等待的检查、复诊或诊断", null, "标明哪些决策依赖后续结果"]
+
+  - id: reproductive_and_hormonal
+    label: 与训练相关的生理和激素状态
+    source_refs: [ACSM_EP, NASM_HISTORY]
+    fields:
+      - [relevance, bool, "是否愿意补充可能影响运动的生殖或激素相关情况", null, "不按性别认同强制隐藏或展开"]
+      - [pregnancy_status, text, "如适用，是否妊娠、可能妊娠或正在确认", null, "可不提供；不推断"]
+      - [gestational_age, number, "如妊娠，当前孕周", weeks, "优先引用医疗信息"]
+      - [pregnancy_complications, text, "与孕期活动相关的并发症及专业限制", null, "出现当前明显异常症状转入症状与优先处理模块"]
+      - [postpartum_details, text, "产后时间、分娩方式、伤口恢复及专业意见", null, "包括盆底、腹部和切口症状"]
+      - [breastfeeding, bool, "是否哺乳", null, "用于恢复、舒适度和营养背景"]
+      - [menstrual_pattern, text, "如适用，月经规律、近期变化或停经", null, "不得单凭月经变化诊断能量不足"]
+      - [cycle_related_effects, text, "经期或周期相关的疼痛、疲劳、出血及训练影响", null, "根据个人经验调整，不预设统一周期训练规则"]
+      - [menopause, text, "如适用，围绝经期或绝经相关症状", null, "记录睡眠、体温和骨健康背景"]
+      - [hormonal_therapy, refs, "激素治疗或避孕药相关记录", null, "关联medication，不自行更改"]
+      - [pelvic_floor_symptoms, text, "运动时漏尿、盆底疼痛、下坠感或其他不适", null, "记录触发动作；急性神经症状按R01，不能一概解释为盆底问题"]
+
+  - id: nutrition_recovery
+    label: 营养、能量摄入、睡眠和恢复
+    source_refs: [NASM_HISTORY, ACSM_EP, CDC_PEM, NICE_MECFS]
+    fields:
+      - [diet_pattern, text, "日常饮食模式和进餐规律", null, "记录实际模式，不用笼统健康分数替代"]
+      - [energy_intake, record:lab_measurement, "已有能量摄入估计或饮食记录", null, "注明日记、软件或营养师估算，不把缺失补为默认热量"]
+      - [protein_intake, record:lab_measurement, "已有蛋白质摄入记录或估计", null, "注明g/day或g/kg/day及方法"]
+      - [food_restrictions, text, "过敏、不耐受、宗教、素食或医疗饮食限制", null, "关联allergy和医学限制"]
+      - [hydration, text, "日常饮水、训练出汗、脱水或医生限水情况", null, "限水情况优先遵循医疗方案"]
+      - [appetite_gi, text, "食欲、恶心、反流、腹泻、吸收或吞咽方面的问题", null, "记录与活动或进餐的关系"]
+      - [restrictive_or_compensatory_behaviors, text, "是否存在明显限制进食、暴食、催吐或用运动补偿进食的情况", null, "可拒答；不据此自动诊断或制定激进减脂方案"]
+      - [possible_underfueling, text, "是否持续疲劳、频繁伤病、反复应力性骨损伤或因进食不足影响训练", null, "症状非特异，需结合其他信息"]
+      - [sleep_hours, number, "通常每日睡眠时长", hours/day, "标明近期平均时间窗"]
+      - [sleep_quality, text, "入睡、夜醒、醒后恢复和白天嗜睡情况", null, "注明打鼾、睡眠呼吸暂停诊断及治疗"]
+      - [shift_work, text, "倒班、熬夜、时差及作息变化", null, "用于安排训练时段和恢复"]
+      - [fatigue_baseline, text, "日常疲劳程度、持续时间和对生活的影响", null, "不只记录运动当时"]
+      - [delayed_exacerbation, bool, "轻微体力或脑力活动后，是否会在数小时或次日出现明显且持久的全身症状加重", null, "筛查PEM/PESE可能性；不等同于普通局部延迟性肌肉酸痛"]
+      - [delayed_exacerbation_details, text, "哪些活动引起加重、延迟多久、持续多久、出现哪些症状及恢复方式", null, "阳性触发R07；不要默认按固定比例每周加量"]
+      - [orthostatic_intolerance, bool, "站立或起身是否反复引起头晕、心悸、乏力或接近昏厥", null, "记录既往诊断和允许的体位，不让用户自测到晕厥"]
+      - [recent_infection_recovery, text, "感染后是否有持续心肺、疲劳、认知或其他功能变化", null, "包含COVID及其他感染；病因不得仅由问卷判断"]
+
+  - id: psychosocial_environment
+    label: 心理、环境和可执行条件
+    source_refs: [WHO_ICF, NASM_HISTORY]
+    fields:
+      - [stress, text, "当前压力及对睡眠、恢复或坚持训练的影响", null, "使用自报；非诊断量表"]
+      - [mental_health_support, text, "你愿意提供的心理健康情况及训练支持需求", null, "可拒答；不要求叙述创伤细节"]
+      - [fear_and_pain_expectations, text, "对运动、受伤或疼痛是否有顾虑", null, "记录可接受的解释和监督方式"]
+      - [body_image_preferences, text, "体重、围度、照片或身体外观讨论是否造成不适", null, "允许不展示相关指标而保留用户愿意提供的字段"]
+      - [exercise_compulsion, text, "是否难以休息、带伤强迫训练或因漏练明显焦虑", null, "影响计划执行和恢复；不自动贴标签"]
+      - [support_and_access, text, "家人同伴、交通、照护、费用或无障碍条件", null, "记录实际障碍和已有解决办法"]
+      - [environmental_triggers, text, "高温寒冷、海拔、空气质量、过敏原或噪声等影响", null, "关联呼吸、感觉和体温调节问题"]
+      - [equipment_accessibility, text, "器械尺寸、上下器械、抓握及辅助装置兼容性", null, "包含假肢、轮椅、握带等适配需求"]
+      - [touch_and_media_preferences, text, "对肢体接触辅助、拍照录像和线上评估的接受范围", null, "每种方式单独可拒绝"]
+
+  - id: activity_history
+    label: 当前活动及既往训练
+    source_refs: [NASM_HISTORY, ACSM_EP]
+    fields:
+      - [current_activities, record:activity, "目前实际进行的运动与日常体力活动", null, "频率、时长、主观强度和症状；不强迫运动测试"]
+      - [sedentary_time, number, "通常每日久坐时间", hours/day, "注明估算或设备记录"]
+      - [steps, measurements, "已有日均步数", steps/day, "记录设备及统计时间窗；不用步数等同全部活动量"]
+      - [training_history, text, "过去训练类型、持续时间和学习过的动作", null, "区分当前熟练度与多年前经验"]
+      - [recent_break, text, "最近中断训练的时长和原因", null, "包含受伤、疾病、工作及其他原因"]
+      - [prior_program_response, text, "哪些计划有效，哪些引起疼痛、疲劳、受伤或难以坚持", null, "保留具体情境"]
+      - [usual_working_loads, record:existing_performance, "已知常用训练重量、次数及实际感受", null, "是已有经验，不要求测试1RM"]
+      - [existing_fitness_tests, record:existing_performance, "自愿提供的已有握力、单侧力量、耐力、活动度及其他测试", null, "记录日期、协议、左右侧；无需以整体能力排名为目标"]
+      - [existing_cpet, record:existing_performance, "已有VO2max/VO2peak、通气阈值或心肺运动试验数据", null, "实测与设备预测分开；保留专业解释及阈值对应心率功率"]
+      - [exercise_adverse_history, text, "运动中或之后的不良反应与受伤经历", null, "包括胸痛、昏厥、喘鸣、异常无力、严重过热等；关联症状记录"]
+
+  - id: goals_and_constraints
+    label: 训练目标与安排条件
+    source_refs: [NASM_HISTORY, ACSM_EP, WHO_ICF]
+    fields:
+      - [goals, multi:goals, "希望通过训练实现什么", null, "选择后记录优先级和具体生活意义"]
+      - [goal_details, record:goal, "每个目标的优先级、预期和时间", null, "区分用户愿望和已评估的可行性"]
+      - [days_per_week, integer, "每周实际可训练天数", days/week, "0至7"]
+      - [session_duration, number, "每次可安排时间", min, "包含热身、休息和准备"]
+      - [time_preferences, text, "可训练日期时段及作息限制", null, "与用药、工作和恢复安排协调"]
+      - [equipment, text, "可使用的器械、空间及场地", null, "可附清单或图片"]
+      - [supervision, text, "现场是否有教练、伙伴或其他协助", null, "记录监督能力，不默认随时有人"]
+      - [preferences, text, "喜欢、愿意尝试或明确不接受的动作和训练方式", null, "把个人偏好与医学限制分开"]
+      - [tracking_preferences, text, "愿意追踪哪些指标，多久复查一次", null, "允许体重外的目标如日常活动舒适度"]
+      - [other_constraints, record:other_factor, "其他影响训练安排的条件", null, "任何模块未覆盖的信息均可补充"]
+
+  - id: reports_and_update
+    label: 附件、核对和更新
+    source_refs: [DESIGN]
+    fields:
+      - [reports, record:report, "自愿提供的原始测量、医学或康复报告", null, "附件可为空，保留文字来源"]
+      - [unmentioned_factors, text, "还有哪些身体差异、既往经历或情况可能影响训练但本表没有问到", null, "不得省略这一开放问题"]
+      - [user_corrections, text, "需要更正、撤回或暂时不确定的信息", null, "触发审计和重新生成摘要"]
+      - [changes_since_last, text, "与上次相比的新症状、诊断、用药、损伤或生活变化", null, "任何关键变化触发重新评估相关模块"]
+      - [reviewed_at, datetime, "用户最近核对日期", null, "不是永久有效的医学许可"]
+
+matrices:
+  conditions:
+    value_type: bool
+    question_prefix: 是否曾确诊或正在评估
+    positive_followup: medical_history.conditions
+    note: 全部条目允许unknown/declined；不在目录中的疾病通过other和condition记录添加。
+    items:
+      - [cardiac_disease, "冠心病、心肌梗死、心衰、心肌病、瓣膜病或先天性心脏问题"]
+      - [arrhythmia, "心律失常或曾因心脏原因晕厥"]
+      - [blood_pressure_disorder, "高血压、低血压或体位性血压问题"]
+      - [vascular_thrombotic, "血栓、肺栓塞、外周血管病或相关血管问题"]
+      - [pulmonary, "哮喘、慢性肺病、肺部手术后或肺功能障碍"]
+      - [diabetes, "糖尿病或血糖调节问题"]
+      - [endocrine, "甲状腺、肾上腺或其他内分泌问题"]
+      - [renal, "肾病、透析或肾脏移植"]
+      - [liver_gi, "肝病、消化系统疾病或吸收障碍"]
+      - [hematologic, "贫血、出血性疾病或其他血液问题"]
+      - [bone_health, "骨质疏松、骨折、应力性骨损伤或其他骨病"]
+      - [joint_soft_tissue, "关节、肌腱、韧带或肌肉疾病"]
+      - [spinal, "脊柱、椎间盘、神经根或脊髓问题"]
+      - [hypermobility_connective, "关节过度活动、反复脱位或结缔组织疾病"]
+      - [stroke_brain, "脑卒中、脑外伤、脑震荡或其他脑部事件"]
+      - [neuromuscular, "周围神经、肌肉、神经肌肉接头或运动控制问题"]
+      - [seizure, "癫痫或其他发作性意识丧失"]
+      - [autonomic, "自主神经问题、体位不耐受或POTS诊断"]
+      - [fatigue_postinfectious, "ME/CFS、长新冠或其他感染后持续症状"]
+      - [immune_inflammatory, "自身免疫、慢性炎症或免疫抑制状态"]
+      - [cancer, "肿瘤及手术、放化疗等治疗经历"]
+      - [vision_hearing_vestibular, "影响活动的视力、听力或前庭平衡问题"]
+      - [sleep_disorder, "睡眠呼吸暂停、失眠或其他睡眠疾病"]
+      - [pelvic_abdominal, "盆底、疝、腹部手术后或相关功能问题"]
+      - [skin_wounds, "慢性伤口、压疮、皮肤病或感染"]
+      - [mental_eating, "心理健康或进食障碍相关问题"]
+      - [congenital_disability, "先天、发育、肢体缺损或其他长期功能差异"]
+      - [other, "其他疾病、综合征或尚未明确原因的健康问题"]
+  symptoms:
+    value_type: bool
+    reference_window: 当前或过去12个月反复出现；更早症状可在symptom记录中补充。
+    positive_followup: medical_history.symptoms
+    items:
+      - [chest_discomfort, "胸痛、胸闷或胸部压迫感"]
+      - [breathlessness, "与活动程度不相称的气短或呼吸困难"]
+      - [palpitations, "心悸、心跳不规则或异常心率感觉"]
+      - [faintness, "头晕、昏厥或接近昏厥"]
+      - [cough_wheeze, "咳嗽、喘鸣或胸部呼吸不适"]
+      - [unusual_fatigue, "持续、异常或妨碍日常生活的疲劳"]
+      - [weakness_wasting, "无力、肌肉变细或功能下降"]
+      - [numbness_sensation, "麻木、刺痛或感觉变化"]
+      - [balance_coordination, "失衡、跌倒或协调变差"]
+      - [pain_swelling, "疼痛、肿胀、僵硬或关节不稳定"]
+      - [headache_vision, "活动相关头痛、视力改变或认知困难"]
+      - [edema_vascular, "水肿、活动时肢体疼痛或颜色温度变化"]
+      - [heat_cold, "异常不耐热、不耐冷或出汗异常"]
+      - [pelvic_bladder_bowel, "盆底、排尿排便或腹部相关症状"]
+      - [delayed_systemic, "活动后延迟出现的全身症状加重"]
+      - [other, "其他症状或自身感觉不对劲的变化"]
+  daily_activities:
+    value_type: enum:functional_difficulty
+    reference_window: 近期通常状态；回答自己的实际经验，不要求当场尝试。
+    positive_followup: function.movement_limits
+    item_extras: 每项可补充受影响侧、原因、辅助方式、舒适持续时间和关联事件。
+    items:
+      - [walk, "平地行走"]
+      - [stairs_up, "上楼"]
+      - [stairs_down, "下楼"]
+      - [sit_stand, "从椅子起身和坐下"]
+      - [floor_transfer, "从地面起身及躺下"]
+      - [standing, "站立和变换体位"]
+      - [bend_reach, "弯腰取物或伸手触物"]
+      - [squat_daily, "日常下蹲或蹲厕"]
+      - [overhead_reach, "抬臂过头或高处取物"]
+      - [push_pull, "推门、拉门或推拉日常物品"]
+      - [grip_carry, "抓握、提物和携物"]
+      - [dress_reach_back, "穿衣、系鞋带或手伸向背后"]
+      - [turn_head_trunk, "转头或转动躯干"]
+      - [single_limb_daily, "日常单腿支撑或上下台阶"]
+      - [breathing_daily, "日常活动时维持舒适呼吸"]
+      - [device_transfer, "使用轮椅、助行器或上下器械"]
+      - [other, "其他生活或训练相关动作"]
+
+records:
+  event:
+    fields:
+      - [event_name, text, "事件名称或描述", null, "用户原话"]
+      - [date, date, "发生时间", null, "允许近似日期"]
+      - [cause, multi:cause, "原因或背景", null, "未知可保留"]
+      - [hospital_treatment, text, "住院、手术、治疗或处理", null, "记录来源"]
+      - [bedrest_immobilization, text, "卧床、固定或停止活动时长", null, "关联功能下降"]
+      - [before_vs_now, text, "事件前与目前的功能差异", null, "描述具体活动"]
+      - [current_state, enum:trajectory, "目前变化趋势", null, "当前情况优先于历史标签"]
+      - [linked_records, refs, "关联损伤、疾病、限制与报告", null, "可多条"]
+  condition:
+    fields:
+      - [name, text, "疾病名称或正在评估的问题", null, "保留原诊断名称"]
+      - [category, text, "对应conditions矩阵项或其他", null, "允许跨系统"]
+      - [diagnostic_status, enum:diagnostic_status, "是否正式确诊", null, "不得自动改为确诊"]
+      - [diagnosed_when, date, "诊断或首次发现时间", null, "可近似"]
+      - [current_control, enum:control, "目前控制及活动状态", null, "保留来源"]
+      - [symptoms_and_triggers, text, "当前症状及诱因", null, "关联症状记录"]
+      - [recent_flare, text, "最近发作或恶化的时间和处理", null, "不把稳定既往史当当前发作"]
+      - [treatment, text, "目前治疗、康复及随访", null, "可关联药物"]
+      - [exercise_effect, text, "对活动、恢复和训练的已知影响", null, "区分自报与专业结论"]
+      - [linked_records, refs, "关联症状、事件、损伤、药物、限制和报告", null, "支持多重原因"]
+  family_event:
+    fields:
+      - [relation, text, "亲属关系", null, "不需姓名"]
+      - [event, text, "发生的疾病或事件", null, "例如运动中猝死或遗传病诊断"]
+      - [age_at_event, number, "发生年龄", years, "不清楚可留空"]
+      - [confirmed, enum:diagnostic_status, "信息明确程度", null, "仅记录，不作遗传诊断"]
+      - [details, text, "家族检查建议或已知情况", null, "已有专业建议优先"]
+  symptom:
+    fields:
+      - [name, text, "症状描述", null, "保留原话"]
+      - [region, multi:body_region, "位置", null, "可补充具体肌群或神经分布"]
+      - [side, enum:laterality, "左右或全身", null, "左右症状不同则分条"]
+      - [onset_date, date, "首次或本次出现时间", null, "紧急症状尽量记录具体时刻"]
+      - [onset_type, enum:onset, "出现方式", null, "突然或逐渐"]
+      - [current, bool, "现在是否仍存在", null, "关键时点"]
+      - [last_episode, datetime, "最近一次出现时间", null, "可用原文和日期精度补充"]
+      - [frequency_duration, text, "频率及每次持续时间", null, "可描述间歇或持续"]
+      - [contexts, multi:activity_context, "出现情境", null, "休息、活动、体位变化及运动后分开"]
+      - [triggers_relief, text, "诱发和缓解因素", null, "动作、负荷、呼吸和休息等"]
+      - [pain_intensity, number, "如为疼痛，0至10的主观程度", score_0_10, "不是全部症状共用的严重度阈值"]
+      - [functional_effect, text, "导致什么事情不能做或需要改变", null, "比单一评分更重要"]
+      - [associated_features, text, "伴随症状", null, "如胸痛伴气短、腿痛伴麻木等"]
+      - [trend, enum:trajectory, "近期变化", null, "尤其记录新发或持续加重"]
+      - [recovery_pattern, text, "活动后多久恢复，是否延迟加重", null, "区分局部酸痛与全身持续恶化"]
+      - [evaluated, text, "是否就医以及专业人员意见", null, "没有就医不等于无问题"]
+      - [linked_records, refs, "关联其他记录及报告", null, "不强行认定因果"]
+  injury:
+    fields:
+      - [event_name, text, "损伤、手术或功能受损事件名称", null, "未知病名可描述"]
+      - [cause, multi:cause, "发生原因或背景", null, "可包含多种原因；事故经过自愿简述"]
+      - [mechanism, text, "如何发生、当时动作或治疗背景", null, "包括非运动外伤、医疗并发症及废用"]
+      - [onset_date, date, "发生或首次发现时间", null, "近似日期可接受"]
+      - [region, multi:body_region, "受影响部位", null, "具体到肌群、关节、骨、神经或器官"]
+      - [side, enum:laterality, "受影响侧", null, "双侧差异明显时拆分或补充"]
+      - [diagnosis, text, "已知诊断", null, "保留报告原名"]
+      - [diagnostic_status, enum:diagnostic_status, "诊断依据", null, "自我猜测不可当作确诊"]
+      - [tissue_or_structure, text, "已知受损组织或结构", null, "肌腱、韧带、肌肉、神经等；不明写unknown"]
+      - [treatment, text, "手术、药物、康复或其他处理", null, "包括未治疗"]
+      - [surgery_details, text, "手术日期、术式及植入物", null, "有手术时填写；不要求技术名词"]
+      - [immobilization, text, "固定、支具、卧床或不负重的时长", null, "描述涉及部位"]
+      - [complications, text, "感染、再损伤或其他并发情况", null, "关联疾病和症状"]
+      - [rehabilitation, text, "做过的康复内容、持续时间和反应", null, "完成疗程不自动等于完全恢复"]
+      - [last_assessment, text, "最近专业复查日期与意见", null, "保留来源与附件"]
+      - [pre_event_function, text, "事件前的功能和常见活动", null, "建立个人基线"]
+      - [current_function, text, "当前能做、做不了和会引起不适的事情", null, "必须体现现存状态"]
+      - [residual_domains, multi:function_domain, "仍受影响的功能", null, "可多选，不只关注疼痛"]
+      - [residual_details, text, "残留症状、活动度下降、无力、感觉改变或代偿", null, "可关联impairment及左右对照"]
+      - [symptom_free_but_limited, bool, "即使不痛，是否仍有无力、僵硬或不敢使用", null, "避免把无痛等于恢复"]
+      - [return_to_activity, text, "恢复过哪些活动，何时恢复及恢复后的反应", null, "区分生活恢复和负荷训练恢复"]
+      - [recurrence, text, "是否反复发作或再次受伤", null, "可关联前次record_id"]
+      - [trajectory, enum:trajectory, "目前恢复趋势", null, "不依据时间长短推定痊愈"]
+      - [limitations, refs, "当前医学限制和允许活动", null, "关联restriction；保留有效期"]
+      - [linked_records, refs, "其他关联疾病、症状、功能和报告", null, "一个功能问题允许多个原因"]
+  impairment:
+    fields:
+      - [description, text, "功能问题描述", null, "例如左手精细操作下降；不用强行归诊断"]
+      - [domains, multi:function_domain, "受影响功能", null, "力量、感觉、心肺、认知等"]
+      - [region, multi:body_region, "部位", null, "必要时器官在描述中说明"]
+      - [side, enum:laterality, "左右侧", null, "可全身"]
+      - [onset_date, date, "何时开始", null, "允许长期先天状态"]
+      - [onset, enum:onset, "出现方式", null, "先天、突发或逐渐等"]
+      - [before_vs_now, text, "原有能力与现在差别", null, "无既往基线可说明"]
+      - [affected_tasks, text, "影响的具体活动", null, "关联daily_activities和movement_limit"]
+      - [severity, enum:functional_difficulty, "实际困难程度", null, "不等同医学分级"]
+      - [compensation_or_aids, text, "替代动作、代偿或辅助方式", null, "记录是否有效和是否引起其他部位负担"]
+      - [trend, enum:trajectory, "变化趋势", null, "识别新出现或加重"]
+      - [cause_evidence, text, "已知或怀疑的原因及依据", null, "不能把同时存在写成因果"]
+      - [professional_plan, text, "现有康复或医疗意见", null, "保留来源"]
+      - [linked_records, refs, "相关疾病、损伤、限制和报告", null, "可多个"]
+  restriction:
+    fields:
+      - [issuer_role, enum:professional_role, "限制或建议由谁给出", null, "教练建议不标记为医学许可"]
+      - [issued_on, date, "给出日期", null, "允许未知"]
+      - [original_instruction, text, "原始限制或允许活动的原话", null, "必须与AI解释分开"]
+      - [reason, text, "针对何种情况", null, "关联疾病或损伤"]
+      - [region_side, text, "适用部位和侧别", null, "全身限制需明确"]
+      - [restricted_movements, text, "需避免或限制的动作、体位和范围", null, "包括冲击、接触、屏气等，仅按实际指令记录"]
+      - [load_intensity_limits, text, "负重、强度、心率或其他上限", null, "有数值时记录单位与适用条件，不自行补值"]
+      - [duration_frequency_limits, text, "时长、频率及休息要求", null, "保留专业描述"]
+      - [allowed_alternatives, text, "明确允许的替代活动", null, "没有描述时不自动扩大范围"]
+      - [expires_or_review, date, "到期或复查日期", null, "不以到期自动推定无限制"]
+      - [return_criteria, text, "恢复或加量的条件", null, "须有来源"]
+      - [status_now, text, "是否仍有效、已更新或不确定", null, "冲突时请求核实，不凭新旧日期直接选一条"]
+      - [report_refs, refs, "原始报告或指令出处", null, "允许自报但需标记"]
+  movement_limit:
+    fields:
+      - [task, text, "动作或生活任务", null, "如抬臂、下楼、卧推握杠"]
+      - [side, enum:laterality, "受影响侧", null, "可双侧"]
+      - [difficulty, enum:functional_difficulty, "完成程度", null, "不要求现场试做"]
+      - [reasons, multi:limitation_reason, "困难原因", null, "可多选"]
+      - [conditions, text, "在什么角度、负荷、速度或持续时间下出现", null, "只填已有经验"]
+      - [tolerated_variant, text, "已经知道能舒适完成的替代方式", null, "记录效果，不擅自扩展"]
+      - [after_effects, text, "完成后即时和次日反应", null, "包括延迟加重"]
+      - [linked_records, refs, "关联症状、损伤或限制", null, "支持左右差异分析"]
+  asymmetry_report:
+    fields:
+      - [domain, text, "差异类型", null, "外观、围度、肌肉量、力量、耐力、角度、感觉、疼痛、控制、步态等"]
+      - [region, text, "比较的部位或动作", null, "名称和左右位置应对应"]
+      - [left_description, text, "左侧情况", null, "保留原话"]
+      - [right_description, text, "右侧情况", null, "不能用未描述等于正常"]
+      - [noticed_on, date, "何时注意到", null, "是否一直如此"]
+      - [evidence, enum:evidence_kind, "依据", null, "感觉与测量分开"]
+      - [trend, enum:trajectory, "是否加重或变化", null, "变化比单次外观更有解释意义"]
+      - [context, text, "出现的动作、负荷、疲劳或姿势条件", null, "区分惯用侧与受伤后变化"]
+      - [associated_features, text, "有无疼痛、麻木、肌肉萎缩或动作失控", null, "关联symptom"]
+      - [clinical_interpretation, text, "已有专业解释", null, "无解释保留未知"]
+      - [linked_records, refs, "相关损伤、测量、视频或报告", null, "可多条"]
+  paired_measurement:
+    fields:
+      - [metric_name, text, "对照指标全名", null, "例如小腿围、膝伸肌等长力矩，不写笼统左右分数"]
+      - [construct, text, "指标实际测量的内容", null, "围度、SMM、瘦软组织、力量、ROM或时间等"]
+      - [region_task, text, "解剖部位或测试动作", null, "左右必须对应"]
+      - [left, measurement, "左侧数值", null, "实际单位写metadata.original_unit与统一unit"]
+      - [right, measurement, "右侧数值", null, "与左侧单位一致后比较"]
+      - [left_repeats, measurements, "左侧重复读数", null, "用于判断测量稳定性"]
+      - [right_repeats, measurements, "右侧重复读数", null, "汇总方式须相同"]
+      - [protocol, text, "方案与设备", null, "位置、关节角度、动作范围、速度、阻力及计量方式"]
+      - [order_and_rest, text, "先测哪侧及两次间休息", null, "避免忽略学习或疲劳影响"]
+      - [pain_fatigue_effort, text, "两侧测试时的疼痛、疲劳和用力程度", null, "状态不同可阻止直接比较"]
+      - [prosthesis_or_support, text, "支具、假肢、辅助和体位", null, "左右不同条件需说明"]
+      - [reference_direction, text, "更高、更低或接近某范围是否更合意", null, "不能假设所有指标越大越好"]
+      - [measurement_error, text, "已知的重复性或最小可检测变化", null, "只能引用适用方法和人群的证据；可未知"]
+      - [professional_interpretation, text, "专业解释和需要复测的建议", null, "与系统计算差值分开"]
+      - [linked_records, refs, "关联损伤、症状和报告", null, "提供上下文"]
+  circumference:
+    fields:
+      - [site, text, "围度部位", null, "颈、胸、腰、臀、上臂、前臂、大腿、小腿或其他"]
+      - [side, enum:laterality, "左右侧", null, "腰臀等不适用；肢体两侧分别保留"]
+      - [value, measurement, "围度", cm, "注明松紧、衣物和体位"]
+      - [landmark, text, "测量标志和具体位置", null, "不同腰围方法不可直接视为完全一致"]
+      - [muscle_state, text, "放松或收缩状态", null, "上臂等位置尤需记录"]
+      - [edema_or_recent_load, text, "局部肿胀、近期训练充血或其他影响", null, "围度差不能直接解释为肌肉量差"]
+  regional_composition:
+    fields:
+      - [region, text, "部位", null, "左上肢、右上肢、左下肢、右下肢、躯干或其他"]
+      - [metric_original_name, text, "设备原始指标名称", null, "骨骼肌量、瘦软组织量、脂肪量等严格区分"]
+      - [value, measurement, "数值", null, "kg、g、百分比或设备单位，不能默认为kg"]
+      - [measurement_definition, text, "指标定义和分区方法", null, "不明则unknown"]
+      - [device_reference, text, "设备显示的参考值或百分比的分母", null, "百分比可能是相对标准值而非组织百分比"]
+      - [report_refs, refs, "原报告", null, "保留完整分部位图表"]
+  bone_report:
+    fields:
+      - [site, text, "检查部位", null, "腰椎、髋部、前臂等；全身组成扫描与临床骨密度检查分开"]
+      - [bmd, measurement, "骨密度BMD", g/cm2, "适用于DXA面积骨密度；其他方法按原单位记录"]
+      - [t_score, number, "报告T分数", null, "只在适用人群下解释，不自动为所有年龄套用"]
+      - [z_score, number, "报告Z分数", null, "保留参考人群"]
+      - [method_reference, text, "检查方法和参考范围", null, "使用原报告"]
+      - [clinician_conclusion, text, "专业结论及活动建议", null, "体脂秤骨量不录入BMD字段"]
+      - [report_refs, refs, "原报告", null, "可选"]
+  blood_pressure:
+    fields:
+      - [systolic, measurement, "收缩压", mmHg, "与舒张压为同次读数"]
+      - [diastolic, measurement, "舒张压", mmHg, "与收缩压为同次读数"]
+      - [pulse, measurement, "同次脉率", bpm, "可选"]
+      - [arm, enum:laterality, "测量手臂", null, "左右分开"]
+      - [posture_rest, text, "体位、测前休息时间及手臂支撑", null, "按实际测量描述"]
+      - [cuff_device, text, "袖带规格及血压计型号", null, "记录是否适配上臂"]
+      - [sequence, integer, "同次测量中的读数序号", count, "保存全部读数，不只抄最低值"]
+      - [medication_and_symptoms, text, "测量前用药、咖啡因、运动和当时症状", null, "可关联medication及symptom"]
+  spirometry:
+    fields:
+      - [date, date, "检查日期", null, "测量metadata也保留时间"]
+      - [vc, measurement, "肺活量VC", L, "不得在不知道方法时把学校体测肺活量自动改成FVC"]
+      - [svc, measurement, "慢肺活量SVC", L, "如报告单列则保留"]
+      - [fvc, measurement, "用力肺活量FVC", L, "使用原始检查结果"]
+      - [fev1, measurement, "第一秒用力呼气容积FEV1", L, "用力呼气的一秒量"]
+      - [fev1_fvc, measurement, "FEV1/FVC", ratio, "统一0至1；原始%保留并除以100换算"]
+      - [pef, measurement, "呼气峰流量PEF", L/s, "原单位L/min需显式换算"]
+      - [bronchodilator_context, text, "支气管舒张剂使用前后及药物状态", null, "不同条件分次保留；不建议用户自行停药"]
+      - [reference_results, text, "预计值、预计值百分比、z分数和参考方程", null, "逐指标对应；不能使用统一肺活量合格线"]
+      - [quality_grade, text, "仪器或操作者给出的质量等级和重复性", null, "没有则unknown"]
+      - [conclusion, text, "检查报告和专业解释", null, "肺活量不是VO2max"]
+      - [report_refs, refs, "完整肺功能报告", null, "可选"]
+  lab_measurement:
+    fields:
+      - [name, text, "指标全名", null, "保留原缩写与全称"]
+      - [value, measurement, "结果", null, "原单位与统一单位并存；缺单位须追问"]
+      - [specimen_or_context, text, "样本类型、空腹状态或测量情境", null, "化验、设备或代谢测定各自注明"]
+      - [reference_interval, text, "报告参考范围", null, "不能把不同实验室范围混用"]
+      - [report_interpretation, text, "专业解释、异常标记及建议", null, "异常标记本身不是新诊断"]
+      - [linked_records, refs, "相关疾病、药物和报告", null, "可重复随访"]
+  medication:
+    fields:
+      - [name, text, "药物或制剂名称", null, "通用名、商品名或标签照片"]
+      - [ingredients, text, "成分", null, "复合补剂尽量保留标签；未知不猜测"]
+      - [reason, text, "使用原因", null, "可拒答"]
+      - [dose_unit, text, "剂量与单位", null, "按原始说明；不要由药名推测"]
+      - [route_frequency, text, "使用方式和频率", null, "包括按需使用"]
+      - [time_relative_exercise, text, "使用时间与训练的关系", null, "如训练前或睡前"]
+      - [start_end_change, text, "开始、停止或调整时间", null, "与症状变化关联但不自动断言因果"]
+      - [side_effects, text, "已出现或专业人员提示的不良影响", null, "包括头晕、心率变化、低血糖、出血、肌肉或肌腱问题等"]
+      - [exercise_instructions, text, "相关的既有运动指导", null, "不生成停药、减药或加药指令"]
+      - [linked_records, refs, "关联疾病、症状、限制和报告", null, "药物分类可由核验药名后补充并标来源"]
+  allergy:
+    fields:
+      - [trigger, text, "过敏或不耐受的物质", null, "区分过敏和其他不耐受"]
+      - [reaction, text, "发生的反应", null, "皮疹、喘鸣或其他"]
+      - [severity_history, text, "严重程度及是否需要急救", null, "记录已发生情况"]
+      - [action_plan, text, "已有避免和处理方案", null, "按专业指令，不擅自配药"]
+  device_aid:
+    fields:
+      - [name_type, text, "植入物、医疗设备或辅助装置", null, "如起搏器、假肢、支具、人工关节、胰岛素泵等"]
+      - [site_side, text, "部位及左右侧", null, "不需器械序列号"]
+      - [installed_or_started, date, "手术或开始使用时间", null, "允许近似"]
+      - [function_and_fit, text, "用途、适配和使用情况", null, "包括疼痛、摩擦、伤口或操作困难"]
+      - [specific_restrictions, text, "专业人员或厂商给出的活动限制", null, "保留出处；无指令不自行创造禁忌"]
+      - [training_adaptations, text, "已有有效训练适配", null, "记录协助需求"]
+      - [linked_records, refs, "关联疾病、损伤、限制和报告", null, "可多条"]
+  screening_result:
+    fields:
+      - [tool_name_version, text, "原问卷名称和版本", null, "如PAR-Q+；不要把改编表标为原量表"]
+      - [completed_at, date, "完成日期", null, "有新症状需更新"]
+      - [original_result, text, "原结果及后续步骤", null, "一个肯定回答不自动等于禁止运动"]
+      - [followup_completed, text, "后续问题或专业评估是否完成", null, "按原工具流程处理"]
+      - [current_relevance, text, "之后是否有健康或用药变化", null, "旧结果不是永久许可"]
+      - [report_refs, refs, "原问卷或结果", null, "许可条件按原来源核对"]
+  activity:
+    fields:
+      - [name, text, "运动、工作体力活动或生活活动", null, "具体名称"]
+      - [frequency, number, "每周次数", sessions/week, "可小数表示隔周活动"]
+      - [duration, number, "通常单次时长", min, "区分持续与间歇"]
+      - [intensity_experience, text, "主观强度或能否舒适交谈", null, "如果填RPE需注明量表是0至10还是6至20"]
+      - [months_consistent, number, "已规律持续多久", months, "不是终身训练史"]
+      - [symptoms_after, text, "活动时、之后和次日的反应", null, "可关联symptom"]
+      - [adaptations, text, "已有辅助或改法", null, "记录个人有效经验"]
+  existing_performance:
+    fields:
+      - [name, text, "已有动作、工作组或测试名称", null, "不要求新增测试"]
+      - [observed_date, date, "记录日期", null, "历史成绩不代表当前能力"]
+      - [side, enum:laterality, "左右侧", null, "单侧与双侧总重量不同"]
+      - [metrics, record:lab_measurement, "指标、单位与数值", null, "可包含kg、N、Nm、deg、秒、mL/kg/min等"]
+      - [sets_reps_load, text, "组数、次数、重量和器械设置", null, "自由重量与器械配重不能直接等同"]
+      - [protocol, text, "动作标准、角度、速度、休息和测试协议", null, "包括主动/被动ROM；辅助与无辅助分开"]
+      - [effort_symptoms, text, "RPE/RIR、是否力竭、疼痛和次日反应", null, "RPE注明量表；不由重复次数推定RIR"]
+      - [measurement_or_estimate, text, "实测或估算及来源", null, "VO2max/VO2peak、最大/峰值心率不混同；手表估算明确标注"]
+      - [professional_interpretation, text, "已有专业解释", null, "不自动产生整体能力评分"]
+      - [report_refs, refs, "原报告或训练记录", null, "可选"]
+  goal:
+    fields:
+      - [description, text, "具体目标", null, "用户原话"]
+      - [priority, integer, "优先级", rank, "1为最高；允许并列"]
+      - [baseline, text, "目前状态", null, "可引用已有数据"]
+      - [desired_change, text, "希望达到的变化", null, "可以是功能或生活目标"]
+      - [time_horizon, text, "希望的时间范围", null, "不等于可行性承诺"]
+      - [tradeoffs, text, "可接受投入、不愿接受的代价和担忧", null, "例如不希望体重追踪加重焦虑"]
+  report:
+    fields:
+      - [report_id, text, "附件或报告标识", null, "系统生成唯一id"]
+      - [type_title, text, "类型和标题", null, "医学、测量、训练记录或其他"]
+      - [exam_date, date, "检查或记录日期", null, "不同于上传日期"]
+      - [issuer_role, text, "出具机构或人员角色", null, "可隐去无关个人身份信息"]
+      - [content_or_attachment, text, "文字或附件引用", null, "附件地址只在获授权范围内使用"]
+      - [extraction_location, text, "提取值所在页码、表格或段落", null, "保持可追溯性"]
+      - [extraction_confirmed, bool, "提取内容是否经用户或来源核验", null, "OCR不能默认正确"]
+      - [limitations, text, "原报告质量、适用范围和限制", null, "保留而不删除"]
+  other_factor:
+    fields:
+      - [description, text, "未列因素", null, "任意相关情况"]
+      - [timing, text, "发生时间和是否当前存在", null, "可近似"]
+      - [exercise_impact, text, "怎样影响训练或恢复", null, "未明原因可以unknown"]
+      - [existing_advice, text, "已有专业建议或本人有效调整", null, "区分来源"]
+      - [linked_records, refs, "相关记录或附件", null, "可选"]
+
+lab_catalog:
+  policy: 仅帮助用户选择已有指标和导入报告；不表示这些项目都需要检测，也不作为无差别补检建议。
+  options:
+    - "空腹或随机血糖、HbA1c；注明采样条件"
+    - "总胆固醇、LDL-C、HDL-C、甘油三酯"
+    - "血红蛋白、血细胞比容、红细胞相关指标"
+    - "已有铁蛋白、转铁蛋白饱和度等铁状态结果"
+    - "肌酐、eGFR及已有其他肾功能结果"
+    - "已有肝功能、电解质、甲状腺或其他内分泌结果"
+    - "已有维生素或营养状态相关结果"
+    - "其他由专业人员认为与该用户活动或恢复有关的指标"
+  interpretation: 记录原单位、参考范围、采样时间和医疗结论；不得因疲劳等非特异症状自动要求所有项目或自行诊断。
+
+branching:
+  semantics: 条件仅决定追问优先级；所有字段保持可访问；对unknown不作阳性或阴性断言。
+  rules:
+    - {id: B01, when: "condition_screen中任一项为true", then: "为相应情况建立condition记录，追问确诊依据、当前状态、治疗、活动影响和限制。"}
+    - {id: B02, when: "损伤、手术、住院、固定、严重感染、脑或脊髓事件、先天差异或不明原因功能下降被报告", then: "建立相应event/injury/condition和impairment关联；逐项问事件前能力、当前能力、恢复及残留影响。"}
+    - {id: B03, when: "疼痛、麻木、无力或左右差异被报告", then: "追问具体位置、侧别、发生时间、当前状态、进展、触发动作和医疗评估；必要时先执行优先处理规则。"}
+    - {id: B04, when: "用户报告左右侧不同或提供可配对数据", then: "建立asymmetry_report和可用的paired_measurement；没有测量时保留主观差异，不填虚构数值。"}
+    - {id: B05, when: "存在药物、补剂或植入装置", then: "追问名称、时间、已有注意事项和相关症状；具体影响需核验实际药物或设备资料，禁止单凭类别硬编码禁忌。"}
+    - {id: B06, when: "心肺症状、昏厥、体位不耐受或近期心肺事件被报告", then: "优先核实目前症状、近期诊疗、用药及允许活动；已有心率血压肺功能数据进入对应模块。"}
+    - {id: B07, when: "活动后延迟全身症状加重", then: "追问活动量、延迟时长、持续天数、伴随症状和原有诊疗；执行R07。"}
+    - {id: B08, when: "日常活动困难或需要辅助", then: "追问难点、患侧、具体原因、可耐受变式、需要的协助及已有康复意见。"}
+    - {id: B09, when: "妊娠、产后、长期停经、骨健康或能量摄入担忧被报告", then: "自愿展开相应生理、营养和已有专业意见；不从性别或单个指标推断状态。"}
+    - {id: B10, when: "上传报告或穿戴设备导入", then: "先解析指标原名、单位、日期、方法、质量和出处；用户确认或核验前标记unverified，禁止覆盖冲突的自报。"}
+    - {id: B11, when: "任一关键问题为unknown或declined", then: "记录受影响决策，提供自愿补充入口；不得连续强迫追问或把拒答推断为患病。"}
+    - {id: B12, when: "新症状、新诊断、药物变更、损伤、妊娠状态改变或长时间中断训练", then: "重评相关模块并使旧摘要标记needs_update；不清空历史记录。"}
+
+interpretation_rules:
+  status: 以下为开发设计逻辑，不是已验证的自动医疗分诊系统；临床阈值或疾病专用处方上线前需按目标人群和当前规范审核。
+  precedence: 当前紧急表现优先于既往正常报告；明确医学限制优先于训练目标；时间、来源和当前变化必须同时考虑。
+  rules:
+    - id: R01
+      source_refs: [AHA_EMERGENCY, NHS_BACK]
+      inputs: [immediate_screen, medical_history.symptoms]
+      trigger: "疑似当前心肺急症表现，或新出现的卒中样局灶神经症状，或新发会阴感觉/排尿排便控制异常及脊柱神经警示表现。"
+      clarification: "记录症状是否当前、发生时刻和是否已接受评估；对已明确急性危险表现不得等待补齐问卷。长期稳定且已评估的残留症状不自动当作新急症。"
+      action: "中止新的训练和测试建议，明确提示立即寻求当地急救/急诊评估；根据所在地显示号码，不固定所有国家使用911。保存触发答案；不要给出心梗、卒中或马尾综合征确诊。"
+    - id: R02
+      source_refs: [ACSM_EP, NHS_BACK]
+      inputs: [medical_history.symptoms, immediate_screen.major_trauma_or_rapid_pain, medical_history.professional_restrictions]
+      trigger: "原因不明的运动相关胸部不适或昏厥、明显进展的无力/麻木、快速恶化疼痛、重大外伤后功能下降，且当前信息不足以解释。"
+      action: "提示及时专业评估；若具有R01的当前紧急表现则升级。暂停与该问题相关的负荷或强度决策，记录尚可讨论的非冲突部分。不能简单分成所有疾病均禁练或全部可练。"
+    - id: R03
+      source_refs: [ACSM_EP, PARQ]
+      inputs: [medical_history.conditions, medical_history.prior_screening, activity_history.current_activities, goals_and_constraints.goals]
+      trigger: "存在已知疾病或筛查工具阳性答案。"
+      action: "依据疾病当前状态、现有症状、既往活动、拟进行强度和原工具后续流程判断下一步；不把每个阳性回答都等同必须禁练或必须取得同一种许可。缺少所需信息则具体追问。"
+    - id: R04
+      source_refs: [DESIGN, ACSM_EP]
+      inputs: [medical_history.professional_restrictions, injury_history.injuries]
+      trigger: "存在已记录的专业活动限制，或多个意见冲突。"
+      action: "保留原话并转换成明确的动作、负荷、体位、时长和部位约束；转换内容与原文区分。冲突或有效性不明时核实；不能由AI解除限制或依据到期日期直接放开。"
+    - id: R05
+      source_refs: [DESIGN, NHANES_DXA, ACSM_EP]
+      inputs: [asymmetry.differences, asymmetry.paired_observations, injury_history.injuries, function.movement_limits]
+      trigger: "存在主观或测量的左右差异。"
+      action: "先检查可比性，再报告差异及不确定性。综合个人基线、惯用侧、任务、疼痛、感觉、控制、损伤和测量误差；没有适用证据时不以10%、15%等统一阈值诊断。不得自动增加所谓弱侧训练量，不假定完全对称是每个人的目标。"
+    - id: R06
+      source_refs: [DESIGN, WHO_ICF, NHS_BACK]
+      inputs: [asymmetry.progressive_wasting_or_weakness, injury_history.persistent_impairments, medical_history.symptoms]
+      trigger: "新发或持续加重的单侧变细、无力、感觉改变、足下垂样表现或功能退步。"
+      action: "先核实时间和伴随症状，标记需要专业评估；急性局灶表现按R01。不要自动解释为训练不足、姿势差或简单肌肉失衡。"
+    - id: R07
+      source_refs: [CDC_PEM, CDC_LONG_COVID, NICE_MECFS]
+      inputs: [nutrition_recovery.delayed_exacerbation, nutrition_recovery.delayed_exacerbation_details, medical_history.conditions]
+      trigger: "存在轻微活动后延迟、持续的全身症状加重，疑似PEM/PESE。"
+      action: "记录触发剂量和恢复模式，建议相应专业评估并结合已有管理方案；不能从问卷确诊ME/CFS或长新冠。不要默认以固定增量的训练进阶处理，也不要为获取数据要求极限测试。"
+    - id: R08
+      source_refs: [DESIGN, ACSM_EP]
+      inputs: [medication_and_exposure.medications, cardiovascular, nutrition_recovery, reproductive_and_hormonal]
+      trigger: "药物、特殊生理状态、症状或疾病可能影响心率、负荷耐受、代谢或恢复。"
+      action: "明确哪些计算或建议的前提不再成立；核实实际药物、病情和专业方案。例如不能无条件用年龄预测最大心率来给服用影响心率药物者划区间。禁止自行停药或更改治疗。"
+    - id: R09
+      source_refs: [NHANES_DXA, ATS_ERS_SPIROMETRY, DESIGN]
+      inputs: [body_composition, cardiovascular, respiratory]
+      trigger: "身体指标需要解释或用于追踪。"
+      action: "核实构念、日期、设备、单位和条件。脂肪量、去脂体重、瘦软组织和骨骼肌分别解释；围度可能受脂肪和水肿影响；肺活量不替代VO2max；静息心率不替代全天平均。禁止把设备评分直接当医学诊断。"
+    - id: R10
+      source_refs: [DESIGN]
+      inputs: [reports_and_update.reports, profile, body_composition, cardiovascular, respiratory, laboratory_reports]
+      trigger: "单位缺失、异常输入、数据冲突或来源质量不足。"
+      action: "保留原值，标记问题并追问或核对报告；不静默修正、平均矛盾数据或裁剪到正常区间。标记为危急值的原报告应优先提示依其专业处置建议处理；若后续增加数值阈值规则，须另行维护经审核的适用指南与版本，不能从本表推导阈值。症状提示紧急情况时，核对设备不能延误R01处理。"
+    - id: R11
+      source_refs: [DESIGN, WHO_ICF, ACSM_EP]
+      inputs: [injury_history, function, goals_and_constraints]
+      trigger: "存在长期稳定的残障、先天差异、义肢或已知功能损伤。"
+      action: "依据实际能力、个人目标、辅助方式和专业限制设计适配需求；不因为诊断标签推定无法训练，不把所有差异视为需要矫正。"
+    - id: R12
+      source_refs: [DESIGN]
+      inputs: [reports_and_update.changes_since_last, reports_and_update.user_corrections]
+      trigger: "关键数据发生变化、更正或撤回。"
+      action: "使依赖旧数据的推断和处方依据失效并重新计算，保存历史和版本；用户更正不悄悄删除既往已执行方案。"
+    - id: R13
+      source_refs: [DESIGN, ACSM_EP]
+      inputs: [goals_and_constraints, activity_history, immediate_screen, medical_history.professional_restrictions]
+      trigger: "需要形成初始计划输入，但部分测量为空。"
+      action: "按决策逐项判断数据充足性。未测体脂或肺活量不自动阻止初始计划；当前症状、限制或损伤情况未澄清时，不给出依赖这些前提的高强度、最大负荷或受伤部位进阶建议。"
+
+derived_metrics:
+  semantics: 仅对answered且有效、时间和测量条件适合的数据计算；保留输入answer_id、公式、单位及时间。派生值不能覆盖原始值。
+  entries:
+    - id: bmi
+      formula: "weight_kg / (height_cm / 100)^2"
+      unit: kg/m2
+      prerequisites: "身高>0、体重>0；年龄与特殊生理状态只影响解释，不改变原始公式。"
+      limitations: "不直接代表体脂或肌肉；不自动套用普通成人参考线到儿童或妊娠。"
+    - id: waist_hip_ratio
+      formula: "waist_cm / hip_cm"
+      unit: ratio
+      prerequisites: "相近时间且方法明确；hip_cm>0。"
+      limitations: "记录腰围和臀围测量位置。"
+    - id: waist_height_ratio
+      formula: "waist_cm / height_cm"
+      unit: ratio
+      prerequisites: "单位相同，height_cm>0。"
+      limitations: "是否解释及参考值需根据适用人群确定。"
+    - id: fat_mass_from_percent
+      formula: "weight_kg * body_fat_percent / 100"
+      unit: kg
+      prerequisites: "同一时间和相容来源，体脂率在0至100之间；0或100需质量核实。"
+      limitations: "明确标为由体脂率推算，不称独立测量。"
+    - id: fat_free_mass_from_percent
+      formula: "weight_kg - fat_mass_from_percent"
+      unit: kg
+      prerequisites: "同上。"
+      limitations: "不能把此值当骨骼肌量。"
+    - id: paired_signed_difference
+      formula: "right - left"
+      unit: 与原指标相同
+      prerequisites: "同构念、同方案、同单位、相近时间、相容体位及用力条件；否则不计算，输出不可比原因。"
+      limitations: "正负仅表示左右数值关系，不等于强弱或病理。"
+    - id: paired_absolute_difference
+      formula: "abs(right - left)"
+      unit: 与原指标相同
+      prerequisites: "同上。"
+      limitations: "与测量误差、个人基线和任务相关性一起呈现。"
+    - id: paired_relative_difference
+      formula: "100 * abs(right - left) / max(left, right)"
+      unit: "%"
+      prerequisites: "左右>=0，max(left,right)>0，指标为有真实零点且允许比例解释的量，并满足可比性条件。"
+      limitations: "这是本系统明确选用的一种差异描述公式，不是统一临床标准；不同分母的文献阈值不能移用。带符号ROM、z分数、量表和厂商评分不自动使用该公式。两侧均0时结果为null。"
+    - id: longitudinal_change
+      formula: "current - prior"
+      unit: 与原指标相同
+      prerequisites: "指标定义和方法相容；显示两次日期、设备及条件变化。"
+      limitations: "数值变好不自动等于临床恢复；疑似不相容数据分开展示。"
+  not_automatically_derived:
+    - 不根据身高体重、肌肉量或肺活量直接推出训练重量、1RM、VO2max或康复阶段。
+    - 不将有症状侧与对侧的比值默认解释为恢复百分比；双侧均受损时对侧不一定是健康参考。
+    - 不从体脂秤骨量推出骨密度或骨折风险；不把厂商身体年龄作为生理年龄。
+    - 无适用方程、人群和方法证据时，不给FFMI、ALMI或其他指数附加诊断阈值。
+
+output_contract:
+  purpose: 交给训练计划模块的结构化摘要；输出内容必须可追溯，不能只给一个综合风险分。
+  keys:
+    participant_id: 匿名编号。
+    spec_version: 所用规格版本。
+    data_as_of: 本次汇总时间与症状最近确认时间。
+    evidence_summary: 已知事实、用户自述、来源未核实和计算结果分别列出。
+    health_factors: 疾病、症状、药物、特殊状态及当前控制情况。
+    injury_and_impairment_map: 每次事件到当前残留功能、患侧、受限任务和已有措施的关联。
+    asymmetry_summary: 差异类型、原始左右值、比较条件、计算公式、变化趋势和不能确定的部分。
+    current_constraints: 专业原始限制、来源、时间、解释及不确定性。
+    adaptations_needed: 场地、器械、沟通、监督、辅助和动作适配需求。
+    goals_and_resources: 优先目标、时间、器械、偏好及执行条件。
+    flags: 标记数组；每项含rule_id、描述、severity、相关answer_ids、依据、建议下一步和是否已处理。
+    missing_and_conflicting_data: 每项含字段路径、缺失/冲突原因、受影响决策及自愿补充问题。
+    followup_questions: 按紧急性和对计划影响排序；已拒答的问题不重复施压。
+    planning_scope: 可讨论或可初步安排的范围、暂不能确定的范围及各自理由。
+    needs_review: 建议何种专业评估、针对什么问题及所需资料；不写无法由本表支持的确诊。
+    reassessment_triggers: 新症状、恢复变化、药物变动、生活或训练变动等。
+  flag_severity: emergency | prompt_professional_review | clarification_needed | adaptation_needed | monitoring_note
+  negative_result_wording: "本次已提供信息未触发所列警示规则；未评估项仍未知。"
+  forbidden_outputs:
+    - "已排除所有健身风险、没有功能损伤、完全健康或医学许可已获批等无法支持的结论。"
+    - "仅凭围度、照片、肌肉量或通用差异百分比确诊肌肉失衡及具体病因。"
+    - "以未提供的体脂、心率、病史、检验结果作为正常值参与决策。"
+    - "把有填写入口等同于必须接受该项检测。"
+    - "把用户自报伤病当成已核实诊断，或把过去恢复解释为当前无限制。"
+
+validation_requirements:
+  schema:
+    - 所有section.id和同一容器内field.id唯一；每行字段必须有5列。
+    - enum、multi、record、matrix和source_refs必须能解析；禁止引用未定义类型。
+    - bool只能接受布尔值；类型转换不可把字符串unknown或空字符串转成false。
+    - 非answered答案value必须为null；已有无效值保存为原始证据且禁止参与计算。
+    - record数组支持多次事件与多时间点，不得以单个文本框覆盖历史。
+  measurements:
+    - 不完整日期保留精度；禁止自动补成当年1月1日后当作精确日期。
+    - 百分比、比例、kg/g、cm/m、L/mL和L/s与L/min必须显式转换并保留原值。
+    - 体重和身高的负值、心率负值、百分比超出物理范围等标记需核实；不能自动替换或删去。
+    - 检查舒张压与收缩压成对、同次、同侧；异常关系先检查录入和原报告。
+    - 部位、侧别、计量构念或测量方法不明的数据可以存储，但不自动作左右或纵向比较。
+    - 默认没有全球通用正常值库；如后续加入，须记录指南版本、适用人群、测量条件及审查日期。
+  required_behavior_cases:
+    - "体脂未测但当前筛查和计划相关信息已提供：保存并继续，不伪造体脂，不强制检测。"
+    - "体脂已填但伤病/症状拒答：记录不确定性，不宣称可据此制定完整负荷方案。"
+    - "左侧瘦软组织与右侧骨骼肌量：阻止直接比较。"
+    - "左右同方法握力30和25kg：绝对差5kg，相对差16.666...%；仅描述差异，不自动判定病理。"
+    - "左右均0或一侧缺失：相对差为null，不输出0%或无限值。"
+    - "多年前手术但目前功能良好：保留事件，不自动急诊或永久禁练。"
+    - "突然单侧无力：不进入普通弱侧加练流程，执行R01。"
+    - "新发腰背痛伴会阴感觉或排尿改变：优先警示，不给拉伸或悬挂等处方。"
+    - "有PEM样延迟加重：不默认固定周增量或强行力竭测试。"
+    - "药物影响心率且仅有年龄：不得伪装成精确心率训练区间。"
+    - "正常体脂、心率或影像但有明显症状：不得用正常数据否定症状。"
+    - "用户修正患侧、单位或日期：所有相关差值、摘要和约束重新计算并保留版本。"
+
+sources:
+  DESIGN:
+    title: 本表原创开发设计
+    url: null
+    scope: 字段组合、缺失状态、数据模型、追问、输出格式和无证据时的限制；未经独立临床验证。
+  NASM_HISTORY:
+    title: NASM Lifestyle and Health History Questionnaire
+    url: https://www.nasm.org/content/dam/nasm/docs/nasmlibraries/pdf/cpt7-lifestyle-and-health-history-handout.pdf
+    access: 公开PDF，3页
+    scope: 初始健康史、生活方式、训练背景和目标。
+  NASM_BODY:
+    title: NASM Body Composition Measurement
+    url: https://www.nasm.org/content/dam/nasm/docs/nasmlibraries/pdf/cpt7-body-composition-assessment-template.pdf
+    access: 公开PDF，1页
+    scope: 身高体重、围度、皮褶及体脂记录。
+  ACSM_EP:
+    title: ACSM Certified Exercise Physiologist Exam Content Outline
+    url: https://acsm.org/wp-content/uploads/2024/12/ACSM-Certified-Exercise-Physiologist-Exam-Content-Outline.pdf
+    access: 公开PDF，2025年7月10日生效版本
+    scope: 健康筛查、评估方法、心率血压、身体成分及个体化运动处方的专业能力框架；不是完整处方手册或本表的逐项规范。
+  ACSM_CPT:
+    title: ACSM Certified Personal Trainer Exam Content Outline
+    url: https://acsm.org/wp-content/uploads/2024/12/ACSM-Certified-Personal-Trainer-Exam-Content-Outline.pdf
+    access: 公开PDF，2025年7月10日生效版本
+    scope: 训练前咨询、筛查、评估和计划的专业能力框架。
+  ACSM_MANUAL:
+    title: ACSM Fitness Assessment Manual官方介绍
+    url: https://acsm.org/education-resources/books/fitness-assessment-manual/
+    access: 公开介绍，书籍全文并非本次免费获取资料
+    scope: 评估领域分类；不声称已读取完整书籍。
+  PARQ:
+    title: PAR-Q+及ePARmed-X+用途和后续筛查说明
+    url: https://www.healthlinkbc.ca/living-well/physical-activity/general-information-and-tools/tools-and-resources/par-q-and-eparmed-x
+    original_form_url: https://eparmedx.com/wp-content/uploads/2025/01/PARQPlus2025ImageFile.pdf
+    access: 公开说明及2025版本问卷链接；正式使用工具时核验当前版本与使用条件。
+    scope: 运动前准备度与后续筛查思路；本表没有复制原工具并沿用其验证地位。
+  NHANES_DXA:
+    title: CDC NHANES 2017–2018 Whole Body DXA Data Documentation and Codebook
+    url: https://wwwn.cdc.gov/Nchs/Data/Nhanes/Public/2017/DataFiles/DXX_J.htm
+    access: 公开数据字典和测量质量说明
+    scope: 脂肪、瘦组织、骨矿物质、全身及分部位数据，以及无效测量和来源记录。
+  ATS_ERS_SPIROMETRY:
+    title: Standardization of Spirometry 2019 Update — ATS/ERS Technical Statement
+    url: https://pmc.ncbi.nlm.nih.gov/articles/PMC6794117/
+    access: 公开全文
+    scope: VC、FVC、FEV1等定义、测量条件、可接受性、重复性及报告要求。
+  AHA_PULSE:
+    title: American Heart Association — All About Heart Rate
+    url: https://www.heart.org/en/health-topics/high-blood-pressure/the-facts-about-high-blood-pressure/all-about-heart-rate-pulse
+    access: 公开说明
+    scope: 静息心率的含义及相关影响因素。
+  WHO_ICF:
+    title: WHO International Classification of Functioning, Disability and Health
+    url: https://www.who.int/standards/classifications/international-classification-of-functioning-disability-and-health
+    access: 公开框架介绍和进一步资源
+    scope: 将身体功能、活动和环境共同纳入记录的框架；本表不声称完成正式ICF编码或量表评估。
+  AHA_EMERGENCY:
+    title: American Heart Association — Heart Attack and Stroke Symptoms
+    url: https://www.heart.org/en/about-us/heart-attack-and-stroke-symptoms
+    access: 公开说明
+    scope: 当前心肺急症和突然局灶神经症状的警示信息。
+  NHS_BACK:
+    title: NHS — Back pain
+    url: https://www.nhs.uk/conditions/back-pain/
+    access: 公开说明，页面标示2026年3月复核
+    scope: 腰背痛伴神经、会阴、膀胱肠道变化等需要及时或紧急评估的表现。
+  CDC_PEM:
+    title: CDC — Strategies to Prevent Worsening of Symptoms in ME/CFS
+    url: https://www.cdc.gov/me-cfs/hcp/clinical-care/treating-the-most-disruptive-symptoms-first-and-preventing-worsening-of-symptoms.html
+    access: 公开临床指导
+    scope: 活动后延迟症状加重及活动管理背景。
+  CDC_LONG_COVID:
+    title: CDC — Long COVID Clinical Guidance
+    url: https://www.cdc.gov/long-covid/hcp/clinical-guidance/index.html
+    access: 公开临床指导，页面标示2026年3月更新
+    scope: 个体化功能与症状记录；正常检查不能单独排除持续症状；PEM可能延迟出现。
+  NICE_MECFS:
+    title: NICE NG206 — ME/CFS Recommendations
+    url: https://www.nice.org.uk/guidance/ng206/chapter/recommendations
+    access: 公开指南；本次通过官方搜索索引核对相关建议，全文访问受限。
+    scope: ME/CFS中不使用固定递增活动量的通用方案；不得扩大解释为所有疲劳者都患ME/CFS。
+  CHINA_FITNESS:
+    title: 国民体质测定标准（2023年修订）
+    url: https://www.sport.gov.cn/n315/n20001395/c25880704/part/25880716.pdf
+    access: 公开PDF，68页
+    scope: 可保留用户已有体测记录及原评分依据；本表不要求执行全套测试，不将总体体质评分作为训练准入条件。

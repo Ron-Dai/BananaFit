@@ -1,0 +1,9 @@
+include README.md
+include VALIDATION.md
+include .env
+include .env.example
+include requirements-dev.lock
+recursive-include src/sexybanana_intake/resources *.yaml
+recursive-include examples *.py *.md
+recursive-include tests *.py
+recursive-include tools *.py
