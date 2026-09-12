@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(pip --version)",
+      "Bash(pip index *)",
+      "Bash(where python *)",
+      "Bash(\"C:\\\\Users\\\\liqiy\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" --version)",
+      "Bash(\"C:\\\\Users\\\\liqiy\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" -m pip install mediapipe opencv-python --quiet)",
+      "Bash(C:\\\\Users\\\\liqiy\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe *)",
+      "Bash('C:\\\\Users\\\\liqiy\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe' -c ' *)"
+    ]
+  }
+}
