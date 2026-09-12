@@ -2,14 +2,18 @@ import cv2
 
 from pose.analyzer import LM
 
-# Standard MediaPipe Pose skeleton connections (landmark index pairs)
+# Body-only skeleton connections (landmark index pairs). Indices 0-10 are the
+# face (nose/eyes/ears/mouth) and are excluded — irrelevant to posture.
 _CONNECTIONS = [
-    (0,1),(1,2),(2,3),(3,7),(0,4),(4,5),(5,6),(6,8),
-    (9,10),(11,12),(11,13),(13,15),(15,17),(15,19),(15,21),(17,19),
+    (11,12),(11,13),(13,15),(15,17),(15,19),(15,21),(17,19),
     (12,14),(14,16),(16,18),(16,20),(16,22),(18,20),
     (11,23),(12,24),(23,24),(23,25),(24,26),(25,27),(26,28),
     (27,29),(28,30),(29,31),(30,32),(27,31),(28,32),
 ]
+
+_FIRST_BODY_LANDMARK = 11
+_LIMB_COLOR = (30, 30, 220)      # BGR red
+_LIMB_THICKNESS = 5
 
 _ANGLE_JOINTS = {
     'left_elbow':  LM['left_elbow'],
@@ -19,8 +23,8 @@ _ANGLE_JOINTS = {
 }
 
 
-def draw_skeleton(frame, landmarks, color=(255, 255, 255)):
-    """Draw skeleton with a uniform bone/joint colour."""
+def draw_skeleton(frame, landmarks, color=_LIMB_COLOR):
+    """Draw the body skeleton (no face points) with a uniform bone/joint colour."""
     if landmarks is None:
         return
     for s, e in _CONNECTIONS:
@@ -31,8 +35,10 @@ def draw_skeleton(frame, landmarks, color=(255, 255, 255)):
         cv2.line(frame,
                  (int(landmarks[s][0]), int(landmarks[s][1])),
                  (int(landmarks[e][0]), int(landmarks[e][1])),
-                 color, 2)
-    for lm in landmarks:
+                 color, _LIMB_THICKNESS)
+    for i, lm in enumerate(landmarks):
+        if i < _FIRST_BODY_LANDMARK:
+            continue
         if lm[3] >= 0.5:
             cv2.circle(frame, (int(lm[0]), int(lm[1])), 4, color, -1)
 
