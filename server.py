@@ -1,3 +1,9 @@
+"""FastAPI backend: serves the pose and equipment pipelines as MJPEG streams
+for the React frontend (frontend/src/main.jsx's AI Coach and Equipment
+Recognition pages). For the same pipelines in a local cv2 window instead,
+see main.py.
+"""
+
 import cv2
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,6 +12,8 @@ from fastapi.responses import StreamingResponse
 from pose.detector import PoseDetector
 from exercises.curl_tracker import CurlTracker
 from pipeline import process_frame
+from equipment.yolo_recognizer import YoloWorldRecognizer
+from utils.drawing import draw_equipment_boxes
 
 app = FastAPI()
 
@@ -18,6 +26,7 @@ app.add_middleware(
 
 
 def _frames():
+    """Yield MJPEG-framed JPEGs of the webcam feed with pose + curl-tracking overlays."""
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         raise RuntimeError('Error: cannot open webcam.')
@@ -46,6 +55,52 @@ def _frames():
 def video_feed():
     """MJPEG stream of the annotated webcam feed for the frontend's <img> tag."""
     return StreamingResponse(_frames(), media_type='multipart/x-mixed-replace; boundary=frame')
+
+
+_equipment_recognizer = None
+
+
+def _get_equipment_recognizer():
+    """Return the process-wide YoloWorldRecognizer, building it on first use.
+
+    Loading YOLO-World (weights + CLIP text embeddings) is expensive, so
+    it's cached across requests instead of rebuilt on every connection.
+    """
+    global _equipment_recognizer
+    if _equipment_recognizer is None:
+        _equipment_recognizer = YoloWorldRecognizer()
+    return _equipment_recognizer
+
+
+def _equipment_frames():
+    """Yield MJPEG-framed JPEGs of the webcam feed with equipment detection boxes."""
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        raise RuntimeError('Error: cannot open webcam.')
+
+    recognizer = _get_equipment_recognizer()
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            detections = recognizer.scan(frame)
+            draw_equipment_boxes(frame, detections)
+
+            ok, jpeg = cv2.imencode('.jpg', frame)
+            if not ok:
+                continue
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
+    finally:
+        cap.release()
+
+
+@app.get('/equipment_feed')
+def equipment_feed():
+    """MJPEG stream of the webcam with live YOLO-World gym-equipment detections."""
+    return StreamingResponse(_equipment_frames(), media_type='multipart/x-mixed-replace; boundary=frame')
 
 
 if __name__ == '__main__':

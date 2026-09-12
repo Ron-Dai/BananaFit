@@ -37,6 +37,7 @@ ANGLE_NAMES = ['left_elbow', 'right_elbow', 'left_knee', 'right_knee', 'left_hip
 
 
 def _iter_dataset_files(input_dir):
+    """Yield (path, extension) for every image/video file found under input_dir, recursively."""
     for root, _, files in os.walk(input_dir):
         for name in files:
             ext = os.path.splitext(name)[1].lower()
@@ -45,11 +46,13 @@ def _iter_dataset_files(input_dir):
 
 
 def _out_path_for(input_dir, output_dir, file_path):
+    """Mirror file_path's position under input_dir into the equivalent path under output_dir."""
     rel = os.path.relpath(file_path, input_dir)
     return os.path.join(output_dir, rel)
 
 
 def _annotate(detector, frame):
+    """Draw skeleton + angle overlays on frame in place; return the computed angles dict."""
     results = detector.detect(frame)
     landmarks = detector.get_landmarks(results, frame.shape)
     angles = compute_key_angles(landmarks)
@@ -59,6 +62,7 @@ def _annotate(detector, frame):
 
 
 def _process_image(detector, file_path, out_image_path, angles_writer):
+    """Annotate one standalone image and append its angle snapshot to angles_writer."""
     frame = cv2.imread(file_path)
     if frame is None:
         print(f'  skip (unreadable): {file_path}')
@@ -72,6 +76,7 @@ def _process_image(detector, file_path, out_image_path, angles_writer):
 
 
 def _process_video(detector, file_path, out_dir, stride, angles_csv_path):
+    """Annotate every `stride`th frame of one video, saving frames + an angle time series."""
     cap = cv2.VideoCapture(file_path)
     if not cap.isOpened():
         print(f'  skip (unreadable): {file_path}')
@@ -105,6 +110,7 @@ def _process_video(detector, file_path, out_dir, stride, angles_csv_path):
 
 
 def main():
+    """Parse CLI args and batch-annotate every dataset file found under --input."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--input', required=True, help='Root directory of the dataset.')
     parser.add_argument('--output', required=True, help='Root directory for annotated output.')

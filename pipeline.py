@@ -1,3 +1,5 @@
+"""Shared per-frame processing pipeline used by both main.py and server.py."""
+
 from pose.analyzer import compute_key_angles
 from utils.drawing import draw_skeleton, draw_angles, draw_curl_hud
 

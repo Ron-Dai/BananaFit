@@ -1,3 +1,5 @@
+"""MediaPipe Tasks API wrapper for single-image pose landmark detection."""
+
 import os
 import urllib.request
 
@@ -13,6 +15,7 @@ _MODEL_PATH = os.path.join(os.path.dirname(__file__), 'pose_landmarker.task')
 
 
 def _ensure_model():
+    """Download the pose landmarker model to _MODEL_PATH if it isn't there yet."""
     if not os.path.exists(_MODEL_PATH):
         print('Downloading pose landmarker model (~4 MB)...')
         urllib.request.urlretrieve(_MODEL_URL, _MODEL_PATH)

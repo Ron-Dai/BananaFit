@@ -1,3 +1,9 @@
+"""CLI entry point: opens the webcam and shows the annotated feed in a cv2 window.
+
+For the same pipeline served over HTTP instead (for the React frontend), see
+server.py.
+"""
+
 import cv2
 
 from pose.detector import PoseDetector
@@ -6,6 +12,7 @@ from pipeline import process_frame
 
 
 def main():
+    """Run the bicep-curl posture analyzer loop until the webcam fails or 'q' is pressed."""
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print('Error: cannot open webcam.')
