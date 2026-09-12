@@ -6,8 +6,3 @@ This is a project aimed to point out inaccurate posture while working out. the f
 * warmup advice
 * recognizing user's posture(mediapipe)
 * give out professional advice simultaneously
-
-
-
-
-
