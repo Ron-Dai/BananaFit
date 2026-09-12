@@ -20,7 +20,10 @@ def _ensure_model():
 
 
 class PoseDetector:
+    """Wraps the MediaPipe Tasks PoseLandmarker for single-image pose detection."""
+
     def __init__(self):
+        """Ensure the model file is downloaded and create the underlying PoseLandmarker."""
         _ensure_model()
         options = mp.tasks.vision.PoseLandmarkerOptions(
             base_options=mp.tasks.BaseOptions(model_asset_path=_MODEL_PATH),
@@ -46,4 +49,5 @@ class PoseDetector:
         )
 
     def close(self):
+        """Release the underlying PoseLandmarker's resources."""
         self._landmarker.close()
