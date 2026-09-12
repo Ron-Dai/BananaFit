@@ -1,3 +1,13 @@
+"""Generic rule-based coaching text, keyed by exercises/registry.py's exercise names.
+
+Not currently wired into main.py/server.py — see CLAUDE.md's Architecture
+section for why (exercise classification misfires mid-set used to switch
+modes and discard rep counts). Exists as a starting point for feeding
+per-exercise cues once exercises/base.py's ExerciseTracker subclasses exist
+for exercises beyond the bicep curl.
+"""
+
+
 def get_feedback(exercise_name, angles):
     """Return list of coaching cues for the given exercise and joint angles."""
     if not angles:

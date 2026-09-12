@@ -1,8 +1,11 @@
+"""COCO-trained SSD MobileNetV2 gym-equipment detector (see equipment/base.py)."""
+
 import os
 
 import cv2
 
-from equipment.registry import EQUIPMENT, DETECTOR_CLASS_TO_TAG
+from equipment.base import EquipmentDetector
+from equipment.registry import DETECTOR_CLASS_TO_TAG
 
 _MODEL_DIR   = os.path.dirname(__file__)
 _MODEL_PATH  = os.path.join(_MODEL_DIR, 'frozen_inference_graph.pb')
@@ -54,7 +57,7 @@ def _ensure_model_files():
     )
 
 
-class EquipmentRecognizer:
+class EquipmentRecognizer(EquipmentDetector):
     """Runs a COCO-trained SSD MobileNetV2 detector and maps hits to equipment tags.
 
     COCO has no gym-equipment classes, so this only recognizes the handful of
@@ -92,14 +95,3 @@ class EquipmentRecognizer:
             if tag is not None:
                 results.append((tag, float(confidence), tuple(int(v) for v in box)))
         return results
-
-    def best_tag(self, frame_bgr):
-        """Return the single highest-confidence recognized equipment tag, or 'unknown'."""
-        matches = self.scan(frame_bgr)
-        if not matches:
-            return 'unknown'
-        return max(matches, key=lambda m: m[1])[0]
-
-    def describe(self, tag):
-        """Look up registry metadata (label, muscles, description) for an equipment tag."""
-        return EQUIPMENT.get(tag, EQUIPMENT['unknown'])

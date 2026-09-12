@@ -1,3 +1,5 @@
+"""All frame-overlay rendering: skeleton, joint angles, curl HUD, equipment boxes."""
+
 import cv2
 
 from pose.analyzer import LM
@@ -46,6 +48,7 @@ def draw_skeleton(frame, landmarks, color=_LIMB_COLOR):
 
 
 def draw_angles(frame, landmarks, angles):
+    """Label each tracked joint (elbows, knees) with its current angle in degrees."""
     if landmarks is None:
         return
     for name, idx in _ANGLE_JOINTS.items():

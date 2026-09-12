@@ -1,4 +1,11 @@
-# Each entry is data-driven so new exercises don't require new code paths.
+"""Static exercise metadata (muscles worked, description, key joints to track).
+
+Each entry is data-driven so new exercises don't require new code paths for
+metadata — but note that rep-counting/form-scoring for a new exercise still
+needs its own exercises/base.py ExerciseTracker subclass (see
+exercises/curl_tracker.py's CurlTracker for the pattern).
+"""
+
 EXERCISES = {
     'squat': {
         'muscles': ['quadriceps', 'hamstrings', 'glutes', 'core'],

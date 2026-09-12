@@ -1,3 +1,5 @@
+"""Joint-angle math: the canonical landmark-name -> index map and angle calculations."""
+
 import numpy as np
 
 # MediaPipe Pose landmark indices (0-32)

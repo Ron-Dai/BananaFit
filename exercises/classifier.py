@@ -1,3 +1,12 @@
+"""Geometric-heuristic exercise classifier, keyed to exercises/registry.py's EXERCISES.
+
+Not currently wired into main.py/server.py — see CLAUDE.md's Architecture
+section for why (a misfire mid-set switched modes and discarded the rep
+count). Complements exercises/base.py's ExerciseTracker subclasses: this
+answers "which exercise is being performed", trackers answer "how many good
+reps of it have happened".
+"""
+
 from pose.analyzer import LM
 
 

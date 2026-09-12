@@ -1,12 +1,15 @@
+"""Open-vocabulary YOLO-World gym-equipment detector (see equipment/base.py)."""
+
 from ultralytics import YOLO
 
-from equipment.registry import EQUIPMENT, YOLO_WORLD_CLASSES
+from equipment.base import EquipmentDetector
+from equipment.registry import YOLO_WORLD_CLASSES
 
 _MODEL_NAME = 'yolov8s-worldv2.pt'   # auto-downloaded by ultralytics on first use (~25 MB)
 _DEFAULT_CONFIDENCE = 0.15            # open-vocabulary models score lower than closed-set ones
 
 
-class YoloWorldRecognizer:
+class YoloWorldRecognizer(EquipmentDetector):
     """Open-vocabulary gym-equipment detector via YOLO-World (Ultralytics).
 
     Unlike EquipmentRecognizer (recognizer.py's COCO-trained SSD MobileNetV2),
@@ -36,14 +39,3 @@ class YoloWorldRecognizer:
             confidence = float(box.conf[0])
             out.append((label, confidence, (int(x1), int(y1), int(x2 - x1), int(y2 - y1))))
         return out
-
-    def best_tag(self, frame_bgr):
-        """Return the single highest-confidence recognized equipment tag, or 'unknown'."""
-        matches = self.scan(frame_bgr)
-        if not matches:
-            return 'unknown'
-        return max(matches, key=lambda m: m[1])[0]
-
-    def describe(self, tag):
-        """Look up registry metadata (label, muscles, description) for an equipment tag."""
-        return EQUIPMENT.get(tag, EQUIPMENT['unknown'])

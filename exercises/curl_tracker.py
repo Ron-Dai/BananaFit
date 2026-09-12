@@ -1,4 +1,10 @@
+"""Bicep-curl rep counting and form scoring — see exercises/base.py for the
+ExerciseTracker contract this fulfills, and the pattern future exercise
+trackers (squat, pushup, ...) should follow.
+"""
+
 import numpy as np
+from exercises.base import ExerciseTracker
 from pose.analyzer import LM
 
 _DOWN_ANGLE = 150   # elbow angle (deg) — arm considered extended / at bottom
@@ -157,7 +163,7 @@ class _ArmTracker:
         return (180, 180, 180)      # grey  — resting
 
 
-class CurlTracker:
+class CurlTracker(ExerciseTracker):
     """Tracks both arms; presents combined state for the HUD."""
 
     def __init__(self):
@@ -165,7 +171,7 @@ class CurlTracker:
         self._left  = _ArmTracker('left')
         self._right = _ArmTracker('right')
 
-        self.rep_count        = 0
+        self._rep_count        = 0
         self._frames_since_rep = _REP_MERGE_FRAMES
 
     def update(self, landmarks, angles):
@@ -176,10 +182,15 @@ class CurlTracker:
         self._frames_since_rep += 1
         if self._left.rep_completed or self._right.rep_completed:
             if self._frames_since_rep >= _REP_MERGE_FRAMES:
-                self.rep_count += 1
+                self._rep_count += 1
             self._frames_since_rep = 0
 
     # --- aggregated properties --------------------------------------------------
+
+    @property
+    def rep_count(self):
+        """Total completed reps so far (a simultaneous two-arm curl counts once)."""
+        return self._rep_count
 
     @property
     def warnings(self):

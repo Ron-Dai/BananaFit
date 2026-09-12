@@ -1,3 +1,9 @@
+"""FastAPI backend: serves the pose and equipment pipelines as MJPEG streams
+for the React frontend (frontend/src/main.jsx's AI Coach and Equipment
+Recognition pages). For the same pipelines in a local cv2 window instead,
+see main.py.
+"""
+
 import cv2
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +26,7 @@ app.add_middleware(
 
 
 def _frames():
+    """Yield MJPEG-framed JPEGs of the webcam feed with pose + curl-tracking overlays."""
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         raise RuntimeError('Error: cannot open webcam.')
@@ -54,8 +61,11 @@ _equipment_recognizer = None
 
 
 def _get_equipment_recognizer():
-    # Loading YOLO-World (weights + CLIP text embeddings) is expensive, so
-    # it's cached across requests instead of rebuilt on every connection.
+    """Return the process-wide YoloWorldRecognizer, building it on first use.
+
+    Loading YOLO-World (weights + CLIP text embeddings) is expensive, so
+    it's cached across requests instead of rebuilt on every connection.
+    """
     global _equipment_recognizer
     if _equipment_recognizer is None:
         _equipment_recognizer = YoloWorldRecognizer()
@@ -63,6 +73,7 @@ def _get_equipment_recognizer():
 
 
 def _equipment_frames():
+    """Yield MJPEG-framed JPEGs of the webcam feed with equipment detection boxes."""
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         raise RuntimeError('Error: cannot open webcam.')

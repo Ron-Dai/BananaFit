@@ -1,3 +1,13 @@
+"""Static gym-equipment metadata and the two detector backends' class vocabularies.
+
+EQUIPMENT is keyed by tag and is data-driven so new equipment doesn't require
+new code paths (mirrors exercises/registry.py). YOLO_WORLD_CLASSES and
+DETECTOR_CLASS_TO_TAG are the two ways a detector backend's raw output maps
+to an EQUIPMENT tag — see equipment/base.py for the shared EquipmentDetector
+interface both equipment/recognizer.py and equipment/yolo_recognizer.py
+implement.
+"""
+
 # Gym-equipment metadata, keyed by tag. Data-driven so new equipment doesn't
 # require new code paths (mirrors exercises/registry.py).
 EQUIPMENT = {
