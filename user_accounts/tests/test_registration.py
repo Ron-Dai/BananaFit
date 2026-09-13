@@ -4,7 +4,7 @@ from conftest import csrf, register
 def test_registration_creates_account_hash_and_session(client, database, settings):
     response = register(client, " Person@Example.COM ")
     assert response.status_code == 201
-    assert response.json()["redirect_url"] == "http://localhost:5173/"
+    assert response.json()["redirect_url"] == "/intake"
     assert response.json()["user"]["email"] == "person@example.com"
     assert settings.cookie_name in response.cookies
     stored = database.user_by_email("person@example.com")

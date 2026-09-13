@@ -1,6 +1,6 @@
 # SexyBanana User Accounts and Workout Plan Ownership
 
-`sexybanana-accounts` is an isolated authentication, authorization, and workout-plan access component for SexyBanana. It provides English registration and login pages, Argon2id password hashing, revocable server-side sessions, SQLite persistence, CSRF and CORS controls, user-to-intake ownership, user-to-plan ownership, and a dashboard-oriented current-plan API.
+`sexybanana-accounts` is an isolated authentication, questionnaire, authorization, and workout-plan access component for SexyBanana. It provides English registration, login, and fitness-intake pages; Argon2id password hashing; revocable server-side sessions; SQLite persistence; CSRF and CORS controls; user-to-intake ownership; user-to-plan ownership; and a dashboard-oriented current-plan API.
 
 The component is designed around the repository that existed at commit `ddee2fe2aece843228bffe0509ff95746bbcc184`. It does not replace the React/Vite frontend, FastAPI video service, computer-vision pipeline, exercise modules, or fitness-intake engine. The existing `Ron Forge` frontend text remains unchanged and is treated as established application branding.
 
@@ -8,23 +8,25 @@ Importing this package starts no server, creates no account, and makes no networ
 
 ## What the component owns
 
-The component owns four boundaries:
+The component owns five boundaries:
 
 1. Account registration and password verification.
 2. Opaque, revocable browser sessions.
 3. Server-established ownership of fitness-intake sessions and plans.
 4. A small public plan representation suitable for the existing dashboard.
+5. A public English questionnaire page that becomes account-owned before any answer reaches the database.
 
 It does not own pose detection, camera capture, exercise classification, equipment detection, medical interpretation, or the generation rules inside `fitness_intake`.
 
-The component serves `/login` and `/register` itself. A successful registration signs the new account in, and a successful login redirects to the configured existing application URL. Direct access to the existing application page may still be possible until its host adds an authentication guard, but protected account, intake, and plan APIs always require a valid account session.
+The component serves `/login`, `/register`, and `/intake` itself. The questionnaire shell is public so visitors can see the questions. Saving answers, resuming an intake, generating a plan, and reading a plan require a valid account session. Registration signs the new account in. Registration and login send an account without a saved plan to `/intake`; an account with a saved plan goes to the configured existing application URL. Direct access to the existing application page may still be possible until its host adds an authentication guard, but protected account, intake, and plan APIs always require a valid account session.
 
 ## Architecture
 
 ```text
 Browser
-  ├── GET /login or /register
+  ├── GET /login, /register, or public /intake
   ├── CSRF token + credential POST
+  ├── authenticated questionnaire answer POSTs
   └── HttpOnly session cookie
               │
               ▼
@@ -69,8 +71,8 @@ user_accounts/
 │   ├── csrf.py                       CSRF and Origin checks
 │   ├── models.py                     Strict request/response models
 │   ├── errors.py                     Stable safe errors
-│   ├── templates/                    English login and registration pages
-│   └── static/                       Matching CSS and browser form logic
+│   ├── templates/                    English login, registration, and intake pages
+│   └── static/                       Matching CSS and browser workflow logic
 └── tests/                             Offline security and contract tests
 ```
 
@@ -109,7 +111,8 @@ Copy values from `.env.example` into the host environment. The package uses the 
 | Variable | Development default | Meaning |
 | --- | --- | --- |
 | `SEXYBANANA_DATABASE_PATH` | `data/sexybanana.db` | Shared local SQLite path |
-| `SEXYBANANA_APP_URL` | `http://localhost:5173/` | Fixed redirect after registration or login |
+| `SEXYBANANA_APP_URL` | `http://localhost:5173/` | Existing application URL used after a plan exists |
+| `SEXYBANANA_QUESTIONNAIRE_URL` | `/intake` | Questionnaire redirect for accounts without a plan; a safe relative path or absolute HTTP(S) URL |
 | `SEXYBANANA_ALLOWED_ORIGINS` | Local frontend and auth origins | Comma-separated credentialed CORS and CSRF origins |
 | `SEXYBANANA_COOKIE_NAME` | `sexybanana_session` | Opaque session cookie name |
 | `SEXYBANANA_COOKIE_SECURE` | `false` | Set `true` behind production HTTPS |
@@ -132,7 +135,7 @@ The live fitness provider uses the existing fitness-intake configuration names:
 
 The `fitness_intake` dependency contains the project owner's explicitly authorized OpenRouter key as a temporary source fallback in its `providers.py`. This account adapter calls `DeepSeekConfig.from_env()` instead of carrying a second copy. Environment variables take priority. Remove the fallback from `fitness_intake` and rotate the key before a public or production release. The value is wrapped in `SecretStr` at runtime and is never returned by an API or written to the database, but source-level inclusion means anyone who can read the repository can copy it.
 
-`SEXYBANANA_APP_URL` must be an absolute HTTP or HTTPS URL and cannot contain embedded credentials or a fragment. It is read from trusted server configuration. The component does not accept a client-provided redirect destination, preventing open redirects.
+`SEXYBANANA_APP_URL` must be an absolute HTTP or HTTPS URL and cannot contain embedded credentials or a fragment. `SEXYBANANA_QUESTIONNAIRE_URL` may be a root-relative path such as `/intake` or an absolute HTTP(S) URL with the same restrictions. Both are read from trusted server configuration. The component does not accept a client-provided redirect destination, preventing open redirects.
 
 `SEXYBANANA_ALLOWED_ORIGINS` must enumerate every trusted origin. Never use a wildcard with credentialed cookies. Include the exact production scheme and host. A trailing slash is normalized away.
 
@@ -158,13 +161,33 @@ Open:
 
 ```text
 http://127.0.0.1:8001/register
+http://127.0.0.1:8001/intake
 ```
 
 The standalone factory uses `build_fitness_service(settings)`. With the default `SEXYBANANA_FITNESS_PROVIDER=deepseek`, it constructs the existing `FitnessIntakeService` with `DeepSeekProvider` and a shared `SQLiteStore`. Login, registration, session creation, and ordinary database reads do not contact the provider. A model request occurs only when the fitness-intake flow performs free-text extraction or generates a ready plan. Set `SEXYBANANA_FITNESS_PROVIDER=fake` for explicit offline development.
 
 The external provider does not bypass the fitness-intake consent model. Before model-assisted extraction or planning, the session must include the consent required by `fitness_intake`; otherwise that module returns `consent_required` instead of sending data.
 
-Registration automatically creates a server-side session and redirects to `SEXYBANANA_APP_URL`. Registration proves that the submitted address is syntactically valid and unique in this database. It does not verify ownership of the email address; no email delivery is included.
+Registration automatically creates a server-side session. A new account has no plan, so its redirect is `SEXYBANANA_QUESTIONNAIRE_URL`. Once the account owns a saved plan, later logins redirect to `SEXYBANANA_APP_URL`. Registration proves that the submitted address is syntactically valid and unique in this database. It does not verify ownership of the email address; no email delivery is included.
+
+## Questionnaire UI and workflow
+
+`GET /intake` returns the approved white questionnaire layout with no sidebar. It deliberately follows the existing frontend's neutral gray background, white surfaces, rounded cards, dark text, orange accent, and English copy. The established application name displayed elsewhere in the frontend is not changed.
+
+The page can be opened without an account. A visitor may select answers on the visible question set, but pressing Continue or Save sends the visitor to `/login`. That small, unfinished set is held only in same-origin browser `sessionStorage`; it is replayed after login and then removed. The server does not accept or persist questionnaire answers without authentication.
+
+For an authenticated account, the browser performs this sequence:
+
+1. Request `GET /api/intake/current`.
+2. Reuse the account's newest intake session or create one through `POST /api/intake/sessions`.
+3. Render up to three questions returned by the existing `fitness_intake` specification.
+4. Submit explicit answer envelopes with the current session version and an idempotency key.
+5. Repeat until readiness reaches review.
+6. Ask for explicit external AI consent.
+7. Generate the fourteen-day plan through the existing `fitness_intake` service.
+8. Save the validated plan under the authenticated account and redirect to `SEXYBANANA_APP_URL`.
+
+The page does not contain a second questionnaire definition. Question wording, option values, field types, branching, readiness checks, emergency behavior, and plan generation continue to come from `fitness_intake`. The web layer only renders that contract and sends explicit answers back to it.
 
 ## Authentication flow
 
@@ -176,7 +199,7 @@ Registration automatically creates a server-side session and redirects to `SEXYB
 6. The server generates a cryptographically random opaque session token.
 7. Only the SHA-256 digest of that token is stored in `auth_sessions`.
 8. The raw token is returned only in an `HttpOnly`, `SameSite=Lax` cookie.
-9. The browser redirects to the fixed configured application URL.
+9. The server chooses the questionnaire URL when no plan exists and the application URL when a plan exists.
 
 Passwords require 12–256 characters, at least one letter, at least one digit, and no leading or trailing whitespace. The plaintext value is never saved or logged.
 
@@ -288,7 +311,7 @@ X-CSRF-Token: opaque-value
 }
 ```
 
-A successful response is `201`, sets the session cookie, and returns the fixed redirect:
+A successful response is `201`, sets the session cookie, and returns the server-selected redirect. A new account has no saved plan and therefore receives `/intake`:
 
 ```json
 {
@@ -299,7 +322,7 @@ A successful response is `201`, sets the session cookie, and returns the fixed r
     "created_at": "2026-09-13T12:00:00+00:00"
   },
   "expires_at": "2026-09-14T00:00:00+00:00",
-  "redirect_url": "http://localhost:5173/"
+  "redirect_url": "/intake"
 }
 ```
 
@@ -313,7 +336,7 @@ POST /api/auth/login
 {"email":"person@example.com","password":"long-password-123"}
 ```
 
-The response has the same authenticated envelope as registration.
+The response has the same authenticated envelope as registration. `redirect_url` is `SEXYBANANA_QUESTIONNAIRE_URL` when the account has no saved plan and `SEXYBANANA_APP_URL` after a plan has been saved.
 
 ### Current account
 
@@ -373,6 +396,81 @@ Omitting the body creates the session with external AI disabled. Consent must re
 {"session_id":"session_...","version":0}
 ```
 
+### Resume the current questionnaire
+
+```http
+GET /api/intake/current
+Cookie: sexybanana_session=...
+```
+
+When the account has not started a questionnaire:
+
+```json
+{"status":"none","session":null}
+```
+
+When a questionnaire exists, `session` contains the current version, progress, stage, readiness, sections, up to three questions, and any record schemas needed to render those questions. This endpoint selects sessions by the authenticated account ID. It never accepts a client-provided user ID.
+
+### Read the next owned questionnaire questions
+
+```http
+GET /api/intake/sessions/{fitness_session_id}/questionnaire
+Cookie: sexybanana_session=...
+```
+
+Example shape:
+
+```json
+{
+  "session_id": "session_...",
+  "version": 2,
+  "profile_version": 1,
+  "stage": {"number": 2, "total": 6, "label": "Safety"},
+  "progress_percent": 12,
+  "questions": [
+    {
+      "question_id": "immediate_screen.current_chest_discomfort",
+      "field_path": "immediate_screen.current_chest_discomfort",
+      "text": "Do you currently have new, significant, or unexplained chest pressure, tightness, or pain?",
+      "answer_type": "bool",
+      "reason": "Current symptoms take priority over all training decisions."
+    }
+  ],
+  "question_schemas": {},
+  "readiness": {"status": "needs_more_info"},
+  "sections": []
+}
+```
+
+The response is presentation data derived from `fitness_intake`; the account component does not invent medical fields or plan rules.
+
+### Submit owned questionnaire answers
+
+```http
+POST /api/intake/sessions/{fitness_session_id}/answers
+Content-Type: application/json
+X-CSRF-Token: opaque-value
+Cookie: sexybanana_session=...
+```
+
+```json
+{
+  "answers": {
+    "immediate_screen.current_chest_discomfort": {
+      "status": "answered",
+      "value": false,
+      "source_type": "self_report"
+    }
+  },
+  "expected_version": 2,
+  "request_id": "web-unique-request-id"
+}
+```
+
+One request accepts one to three answers, matching the existing intake service's bounded turn size. `expected_version` prevents an older browser tab from overwriting newer state. `request_id` makes safe retries idempotent. The response is the next questionnaire state.
+
+The answer envelope also supports the explicit missingness statuses `unknown`, `not_measured`, `declined`, and `not_applicable`. Those statuses must omit `value`; they are not converted to negative answers.
+
 ### Update consent for an owned intake session
 
 ```http
@@ -419,6 +517,8 @@ X-CSRF-Token: opaque-value
 
 Generation occurs only after ownership verification. A successful validated fitness plan is saved with the same authenticated account ID and intake session ID. If readiness is incomplete, the endpoint returns readiness and a `current_plan` state without inventing a plan.
 
+On success, `redirect_url` is also returned so the questionnaire can send the user to the existing application.
+
 ### List owned plans
 
 ```http
@@ -441,7 +541,7 @@ The path uses the account plan record ID, such as `userplan_...`. Supplying anot
 
 ## Current plan API for the dashboard
 
-`GET /api/plans/current` is the main future frontend integration point. It returns the newest plan owned by the signed-in account without exposing the fitness-intake session's unrelated health answers.
+`GET /api/plans/current` is the main frontend integration point and the required way to match a signed-in user with a training plan. It returns the newest plan owned by the account resolved from the session cookie without exposing unrelated health answers. The frontend does not send an email or user ID to select a plan.
 
 No plan:
 
@@ -599,6 +699,9 @@ Important methods:
 | `claim_fitness_session_for_user(user_id, session_id)` | Host-only migration helper for an existing unowned session |
 | `assert_fitness_session_owner(user_id, session_id)` | Apply uniform non-disclosing ownership enforcement |
 | `get_fitness_session_for_user(user_id, session_id)` | Load an intake session only after ownership checks |
+| `latest_fitness_session_for_user(user_id)` | Find the account's newest resumable intake session |
+| `questionnaire_state_for_user(user_id, session_id)` | Return staged progress, questions, field schemas, and readiness after ownership checks |
+| `submit_questionnaire_answers_for_user(user_id, session_id, answers, ...)` | Save one bounded answer turn and return the next state |
 | `update_fitness_consent_for_user(user_id, session_id, consent, ...)` | Update provider consent only after ownership checks |
 | `generate_plan_for_user(user_id, session_id, **kwargs)` | Verify ownership, generate, validate, and save the plan |
 | `save_plan_for_user(user_id, session_id, plan)` | Save a previously validated plan idempotently |
@@ -746,7 +849,7 @@ ruff check user_accounts
 pytest -q fitness_intake/tests
 ```
 
-Coverage includes registration, normalization, password policy, Argon2 hashes, duplicate accounts, login, generic credential failures, cookies, session expiration, logout, CSRF, trusted origins, migration idempotency, file permissions, foreign keys, concurrent duplicate inserts, fitness ownership, plan ownership, repeated saves, missing/stale/current plan contracts, cross-user plan IDs, cross-user fitness session IDs, ignored client identity, public field filtering, pages, and security headers.
+Coverage includes registration, normalization, password policy, Argon2 hashes, duplicate accounts, plan-aware login redirects, cookies, session expiration, logout, CSRF, trusted origins, migration idempotency, file permissions, foreign keys, concurrent duplicate inserts, public questionnaire rendering, authenticated answer persistence, questionnaire resumption, fitness ownership, plan ownership, repeated saves, missing/stale/current plan contracts, cross-user plan IDs, cross-user questionnaire IDs, ignored client identity, public field filtering, pages, and security headers.
 
 The component tests do not call DeepSeek, OpenRouter, a camera, an email provider, or GitHub.
 
@@ -774,7 +877,15 @@ Confirm the frontend request uses `credentials: "include"`, the origins are conf
 
 ### Registration redirects to the wrong application
 
-Set `SEXYBANANA_APP_URL` on the authentication server. The client cannot override it.
+If the account has no plan, set `SEXYBANANA_QUESTIONNAIRE_URL`. If the account has a plan, set `SEXYBANANA_APP_URL`. The client cannot override either destination.
+
+### The questionnaire is visible while signed out
+
+This is the intended public-page behavior. A signed-out visitor can see and fill the visible form, but the answer and plan APIs return `401`. Continue or Save takes the visitor to login before the server creates or changes health data.
+
+### The questionnaire repeatedly shows a question
+
+Inspect the API error first. Every displayed question must be answered or explicitly skipped. For concurrent tabs, reload the returned state after `version_conflict`. Do not remove `expected_version` to hide this condition.
 
 ### `database is locked`
 
@@ -810,39 +921,41 @@ The fitness profile changed after generation. Reassess and generate a new plan r
 6. Configure exact credentialed CORS origins.
 7. Run migrations by constructing `AccountDatabase`.
 8. Open `/register` and create a fictional development account.
-9. Confirm the response sets an `HttpOnly` session and redirects to the existing application URL.
-10. Create an intake session through the authenticated endpoint or Python service method, recording external AI consent only after an actual user choice.
-11. Collect and confirm intake answers through the existing fitness-intake public API.
-12. Call `generate_plan_for_user`, which verifies ownership before generation and saves the validated result.
-13. Request `/api/plans/current` using the browser session cookie.
-14. Populate the future dashboard using the documented summary and day fields.
-15. Show a reassessment state whenever the response is stale.
-16. Confirm a second fictional account receives `404` for the first account's session and plan identifiers.
+9. Confirm the response sets an `HttpOnly` session and redirects a new account to `/intake`.
+10. Let the intake page create an owned session and obtain its first three questions.
+11. Submit bounded answer turns until the existing intake engine reports review readiness.
+12. Record external AI consent only after the user checks the consent control.
+13. Generate the plan; ownership is verified before generation and the validated result is saved under the account.
+14. Confirm the questionnaire redirects to the existing application URL.
+15. Request `/api/plans/current` using the browser session cookie.
+16. Populate the dashboard using the documented summary and day fields.
+17. Show a reassessment state whenever the response is stale.
+18. Confirm a second fictional account receives `404` for the first account's session and plan identifiers.
 
 This design keeps authentication and ownership at the host boundary while preserving the fitness-intake component as a reusable planning domain service.
 
 ## Manual Git handoff
 
-The component was prepared on the local `feature/auth-user-plans` branch. Review the candidate files before committing:
+The questionnaire integration was prepared on the local `feature/fitness-questionnaire` branch. It is based on the local authentication commit and changes only `user_accounts/`. Review the candidate files before committing:
 
 ```bash
 git status --short
 git diff -- user_accounts
 ```
 
-Because the component is currently new and untracked, add only its directory, inspect the staged change, and create the local commit:
+Add only its directory, inspect the staged change, and create the local commit:
 
 ```bash
 git add user_accounts
 git diff --cached --stat
 git diff --cached
-git commit -m "Add authentication and user plan ownership component"
+git commit -m "Add owned fitness questionnaire workflow"
 ```
 
 The repository owner can then publish the branch manually:
 
 ```bash
-git push -u origin feature/auth-user-plans
+git push -u origin feature/fitness-questionnaire
 ```
 
 These commands intentionally add only `user_accounts/`. Do not use `git add .` when unrelated local files are present.

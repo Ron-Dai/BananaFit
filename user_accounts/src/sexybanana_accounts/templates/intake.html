@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fitness Intake · ForgeFit</title>
+  <link rel="stylesheet" href="/auth-static/intake.css">
+  <script src="/auth-static/intake.js" defer></script>
+</head>
+<body>
+  <main class="intake-shell">
+    <header class="page-header">
+      <div>
+        <a class="brand" href="/intake" aria-label="ForgeFit fitness intake">
+          <span class="brand-mark" aria-hidden="true">ϟ</span>
+          <span>Forge<span>Fit</span></span>
+        </a>
+        <h1>Fitness Intake</h1>
+        <p>Tell us what your body needs before we build your two-week plan.</p>
+      </div>
+      <a class="account-link" data-account-link href="/login">Sign in to save progress</a>
+    </header>
+
+    <section class="progress-panel" aria-label="Questionnaire progress">
+      <span class="step-pill" data-step>Step 2 of 6</span>
+      <div class="progress-track" aria-hidden="true">
+        <span data-progress-bar style="width: 32%"></span>
+      </div>
+      <strong data-progress-label>32% complete</strong>
+    </section>
+
+    <section class="questionnaire-card" aria-labelledby="questionnaire-title">
+      <div class="card-heading">
+        <p class="stage-label" data-stage-label>Safety</p>
+        <h2 id="questionnaire-title" data-card-title>
+          Let’s check that training is appropriate today
+        </h2>
+        <p data-card-subtitle>
+          Choose the answer that best describes you. You can skip any question.
+        </p>
+      </div>
+
+      <div class="status-message" data-status-message role="status" aria-live="polite"></div>
+      <div class="questions" data-questions></div>
+
+      <label class="provider-consent" data-provider-consent hidden>
+        <input type="checkbox" data-provider-consent-input>
+        <span>
+          <strong>Generate my personalized plan</strong>
+          I agree to send the minimum required intake data to the configured AI provider for
+          fourteen-day plan generation.
+        </span>
+      </label>
+
+      <div class="privacy-note">
+        <span aria-hidden="true">♢</span>
+        <p>Your answers are used only to assess readiness and personalize your plan.</p>
+      </div>
+
+      <footer class="card-actions">
+        <button class="secondary" type="button" data-back>Back</button>
+        <button class="save-link" type="button" data-save>Save and finish later</button>
+        <button class="primary" type="button" data-continue>Continue</button>
+      </footer>
+    </section>
+  </main>
+</body>
+</html>

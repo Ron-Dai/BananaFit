@@ -67,6 +67,41 @@ class UpdateConsentRequest(StrictModel):
     expected_version: int | None = Field(default=None, ge=0)
 
 
+class AnswerInput(StrictModel):
+    status: Literal["answered", "unknown", "not_measured", "declined", "not_applicable"]
+    value: Any = None
+    unit: str | None = Field(default=None, max_length=40)
+    source_type: Literal["self_report"] = "self_report"
+    note: str = Field(default="", max_length=1000)
+
+    @model_validator(mode="after")
+    def status_matches_value(self):
+        if self.status == "answered" and self.value is None:
+            raise ValueError("An answered value is required.")
+        if self.status != "answered" and self.value is not None:
+            raise ValueError("Missingness statuses cannot include a value.")
+        return self
+
+
+class SubmitAnswersRequest(StrictModel):
+    answers: dict[str, AnswerInput] = Field(min_length=1, max_length=3)
+    expected_version: int | None = Field(default=None, ge=0)
+    request_id: str | None = Field(default=None, min_length=8, max_length=128)
+
+    @field_validator("answers")
+    @classmethod
+    def safe_answer_paths(cls, value: dict[str, AnswerInput]):
+        for path in value:
+            if (
+                len(path) > 160
+                or path.startswith(".")
+                or path.endswith(".")
+                or any(not part.replace("_", "").isalnum() for part in path.split("."))
+            ):
+                raise ValueError("An answer field path is invalid.")
+        return value
+
+
 class GeneratePlanRequest(StrictModel):
     start_date: str | None = None
     timezone: str | None = None
