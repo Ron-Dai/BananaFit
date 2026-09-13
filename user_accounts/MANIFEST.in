@@ -1,0 +1,2 @@
+recursive-include src/sexybanana_accounts/static *
+recursive-include src/sexybanana_accounts/templates *

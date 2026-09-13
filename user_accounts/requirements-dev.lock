@@ -1,0 +1,12 @@
+# Direct versions used for the validation recorded in VALIDATION.md.
+# Install the local fitness-intake package separately as described in README.md.
+argon2-cffi==25.1.0
+email-validator==2.3.0
+fastapi==0.141.1
+httpx==0.28.1
+pydantic==2.13.5
+pydantic-settings==2.15.0
+pytest==9.1.1
+python-multipart==0.0.32
+ruff==0.16.7
+uvicorn==0.52.4
