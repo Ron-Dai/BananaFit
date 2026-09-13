@@ -9,7 +9,7 @@ from common import fictional_answers
 
 
 def load_component_env() -> None:
-    """Load the tracked demonstration configuration without overriding host secrets."""
+    """Load an optional local override without replacing host environment values."""
     path = Path(__file__).resolve().parents[1] / ".env"
     if not path.is_file():
         return

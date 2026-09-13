@@ -16,7 +16,7 @@ and the `deepseek/deepseek-chat` model.
 The live flow successfully:
 
 1. Connected to the configured external API over HTTPS.
-2. Authenticated using a runtime environment variable.
+2. Authenticated using the project owner's authorized development credential.
 3. Extracted a fictional age from natural-language input.
 4. Held the extracted value for explicit user confirmation.
 5. Accepted a complete fictional structured fitness profile.
@@ -29,7 +29,7 @@ The live flow successfully:
 ## Automated checks
 
 ```text
-120 passed in 17.37s
+121 passed
 All checks passed!
 PUBLIC_DEMONSTRATION_KEY_CONFIGURED
 ```
@@ -41,11 +41,11 @@ methods. HTTP unit tests use synthetic credentials and mocked transports.
 
 ## Credential handling
 
-A user-authorized free demonstration key is stored in the tracked `.env` file so
-the example works immediately after cloning. The example loads it without
-overriding any environment variables supplied by the host. Production deployments
-should override `DEEPSEEK_API_KEY` with their own managed credential. The OpenRouter
-example uses:
+A user-authorized free demonstration key is stored as a source fallback in
+`src/sexybanana_intake/providers.py`, so the package and example work immediately
+after cloning. Environment variables take priority over the fallback. Production
+deployments should remove and rotate the fallback, then provide
+`DEEPSEEK_API_KEY` through managed configuration. The OpenRouter defaults are:
 
 ```bash
 export DEEPSEEK_BASE_URL=https://openrouter.ai/api/v1
@@ -55,6 +55,12 @@ export DEEPSEEK_TEMPERATURE=0
 
 The host application is responsible for secret storage, user authentication,
 authorization, rate limiting, and deployment controls.
+
+After moving the key into `providers.py`, the live example was executed with
+`DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`, and `DEEPSEEK_BASE_URL` explicitly removed
+from the process environment. It authenticated through the bundled fallback,
+confirmed the fictional extracted age, returned `Planning status: ready`, and
+produced a locally validated fourteen-day plan.
 
 ## Scope and limitations
 
