@@ -19,6 +19,7 @@ from .models import (
     LoginRequest,
     RegisterRequest,
     SessionPrincipal,
+    SubmitAnswersRequest,
     UpdateConsentRequest,
 )
 from .service import AccountService
@@ -84,6 +85,11 @@ def _set_session_cookie(response: Response, settings: AccountSettings, token: st
     )
 
 
+def _post_login_redirect(service: AccountService, user_id: str) -> str:
+    current = service.get_current_plan_for_user(user_id)
+    return service.settings.questionnaire_url if current.status == "none" else service.settings.app_url
+
+
 def create_router(service: AccountService) -> APIRouter:
     """Create an inert router; the caller explicitly mounts it on a FastAPI app."""
     router = APIRouter()
@@ -97,6 +103,10 @@ def create_router(service: AccountService) -> APIRouter:
     def register_page() -> HTMLResponse:
         return HTMLResponse(_resource_text("templates", "register.html"))
 
+    @router.get("/intake", response_class=HTMLResponse, include_in_schema=False)
+    def intake_page() -> HTMLResponse:
+        return HTMLResponse(_resource_text("templates", "intake.html"))
+
     @router.get("/auth-static/auth.css", include_in_schema=False)
     def auth_css() -> Response:
         return Response(_resource_text("static", "auth.css"), media_type="text/css")
@@ -104,6 +114,14 @@ def create_router(service: AccountService) -> APIRouter:
     @router.get("/auth-static/auth.js", include_in_schema=False)
     def auth_js() -> Response:
         return Response(_resource_text("static", "auth.js"), media_type="text/javascript")
+
+    @router.get("/auth-static/intake.css", include_in_schema=False)
+    def intake_css() -> Response:
+        return Response(_resource_text("static", "intake.css"), media_type="text/css")
+
+    @router.get("/auth-static/intake.js", include_in_schema=False)
+    def intake_js() -> Response:
+        return Response(_resource_text("static", "intake.js"), media_type="text/javascript")
 
     @router.get("/api/auth/csrf")
     def csrf_token() -> JSONResponse:
@@ -131,7 +149,7 @@ def create_router(service: AccountService) -> APIRouter:
                 "authenticated": True,
                 "user": user.model_dump(),
                 "expires_at": expires_at,
-                "redirect_url": settings.app_url,
+                "redirect_url": _post_login_redirect(service, user.id),
             },
             status_code=201,
         )
@@ -148,7 +166,7 @@ def create_router(service: AccountService) -> APIRouter:
                 "authenticated": True,
                 "user": user.model_dump(),
                 "expires_at": expires_at,
-                "redirect_url": settings.app_url,
+                "redirect_url": _post_login_redirect(service, user.id),
             }
         )
         _set_session_cookie(response, settings, token)
@@ -184,6 +202,44 @@ def create_router(service: AccountService) -> APIRouter:
             consent=submitted.consent.model_dump(),
         )
         return {"session_id": session.session_id, "version": session.version}
+
+    @router.get("/api/intake/current")
+    def current_intake_session(request: Request) -> dict:
+        principal = _principal(request, service)
+        session_id = service.latest_fitness_session_for_user(principal.user.id)
+        if session_id is None:
+            return {"status": "none", "session": None}
+        state = service.questionnaire_state_for_user(principal.user.id, session_id)
+        return {"status": "available", "session": state}
+
+    @router.get("/api/intake/sessions/{fitness_session_id}/questionnaire")
+    def questionnaire_state(fitness_session_id: str, request: Request) -> dict:
+        principal = _principal(request, service)
+        return service.questionnaire_state_for_user(principal.user.id, fitness_session_id)
+
+    @router.post("/api/intake/sessions/{fitness_session_id}/answers")
+    async def submit_questionnaire_answers(
+        fitness_session_id: str, request: Request
+    ) -> dict:
+        validate_csrf(request, settings)
+        principal = _principal(request, service)
+        try:
+            submitted = SubmitAnswersRequest.model_validate(await _json_object(request))
+        except ValidationError:
+            raise AccountError(
+                "invalid_request", ERROR_MESSAGES["invalid_request"], 422
+            ) from None
+        answers = {
+            path: answer.model_dump(exclude_none=True)
+            for path, answer in submitted.answers.items()
+        }
+        return service.submit_questionnaire_answers_for_user(
+            principal.user.id,
+            fitness_session_id,
+            answers,
+            expected_version=submitted.expected_version,
+            request_id=submitted.request_id,
+        )
 
     @router.post("/api/intake/sessions/{fitness_session_id}/consent")
     async def update_intake_consent(fitness_session_id: str, request: Request) -> dict:
@@ -229,6 +285,7 @@ def create_router(service: AccountService) -> APIRouter:
             "status": result.status,
             "readiness": result.readiness.model_dump(),
             "current_plan": current.model_dump(),
+            "redirect_url": settings.app_url if current.status != "none" else None,
         }
 
     @router.get("/api/intake/sessions/{fitness_session_id}")

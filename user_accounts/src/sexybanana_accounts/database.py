@@ -245,6 +245,15 @@ class AccountDatabase:
             ).fetchall()
         return [row["fitness_session_id"] for row in rows]
 
+    def latest_fitness_session_for_user(self, user_id: str) -> str | None:
+        with self.read() as connection:
+            row = connection.execute(
+                "SELECT fitness_session_id FROM fitness_session_owners "
+                "WHERE user_id = ? ORDER BY created_at DESC, fitness_session_id DESC LIMIT 1",
+                (user_id,),
+            ).fetchone()
+        return row["fitness_session_id"] if row is not None else None
+
     def delete_user(self, user_id: str) -> None:
         with self.transaction() as connection:
             connection.execute("DELETE FROM users WHERE id = ?", (user_id,))

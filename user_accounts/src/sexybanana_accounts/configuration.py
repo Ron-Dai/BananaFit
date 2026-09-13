@@ -13,6 +13,7 @@ class AccountSettings(BaseSettings):
 
     database_path: Path = Path("data/sexybanana.db")
     app_url: str = "http://localhost:5173/"
+    questionnaire_url: str = "/intake"
     allowed_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"
         "http://localhost:8001,http://127.0.0.1:8001"
@@ -39,6 +40,20 @@ class AccountSettings(BaseSettings):
         if parsed.username or parsed.password or parsed.fragment:
             raise ValueError("Application URL must not contain credentials or a fragment.")
         return value
+
+    @field_validator("questionnaire_url")
+    @classmethod
+    def safe_questionnaire_url(cls, value: str) -> str:
+        parsed = urlparse(value)
+        if (
+            value.startswith("/")
+            and not value.startswith("//")
+            and "\\" not in value
+            and not parsed.query
+            and not parsed.fragment
+        ):
+            return value
+        return cls.safe_app_url(value)
 
     @field_validator("cookie_name")
     @classmethod

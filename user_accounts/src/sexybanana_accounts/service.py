@@ -28,6 +28,10 @@ class FitnessService(Protocol):
     def get_session(self, session_id: str): ...
     def delete_session(self, session_id: str) -> None: ...
     def update_consent(self, session_id: str, consent, **kwargs): ...
+    def get_next_questions(self, session_id: str, **kwargs): ...
+    def submit_answers(self, session_id: str, answers, **kwargs): ...
+    def evaluate_readiness(self, session_id: str): ...
+    def list_sections(self, session_id: str): ...
     def generate_plan(self, session_id: str, **kwargs): ...
 
 
@@ -182,6 +186,133 @@ class AccountService:
             return fitness.get_session(fitness_session_id)
         except Exception:
             raise AccountError("not_found", ERROR_MESSAGES["not_found"], 404) from None
+
+    @staticmethod
+    def _fitness_error(exc: Exception, *, default_status: int = 422) -> AccountError:
+        code = getattr(exc, "code", "invalid_request")
+        status = 409 if code in {"version_conflict", "idempotency_conflict"} else default_status
+        return AccountError(code, str(exc) or ERROR_MESSAGES["invalid_request"], status)
+
+    def latest_fitness_session_for_user(self, user_id: str) -> str | None:
+        return self.database.latest_fitness_session_for_user(user_id)
+
+    def questionnaire_state_for_user(
+        self, user_id: str, fitness_session_id: str
+    ) -> dict[str, Any]:
+        self.assert_fitness_session_owner(user_id, fitness_session_id)
+        fitness = self._require_fitness()
+        try:
+            questions = fitness.get_next_questions(fitness_session_id, limit=3)
+            session = fitness.get_session(fitness_session_id)
+            readiness = fitness.evaluate_readiness(fitness_session_id)
+            sections = fitness.list_sections(fitness_session_id)
+        except Exception as exc:
+            raise self._fitness_error(exc) from None
+        answered = sum(item.get("answered", 0) for item in sections)
+        missing = len(getattr(readiness, "missing", []))
+        denominator = max(answered + missing, 1)
+        progress = 100 if not questions and readiness.status in {"ready", "limited"} else int(
+            min(95, answered * 100 / denominator)
+        )
+        stage = self._questionnaire_stage(questions, readiness.status)
+        return {
+            "session_id": session.session_id,
+            "version": session.version,
+            "profile_version": session.profile_version,
+            "stage": stage,
+            "progress_percent": progress,
+            "questions": [question.model_dump() for question in questions],
+            "question_schemas": self._question_schemas(fitness, session, questions),
+            "readiness": readiness.model_dump(),
+            "sections": sections,
+        }
+
+    @staticmethod
+    def _questionnaire_stage(questions, readiness_status: str) -> dict[str, Any]:
+        if not questions and readiness_status in {"ready", "limited", "emergency"}:
+            return {"number": 6, "total": 6, "label": "Review"}
+        paths = [question.field_path for question in questions]
+        prefixes = {path.split(".", 1)[0] for path in paths}
+        if prefixes & {"immediate_screen"}:
+            number, label = 2, "Safety"
+        elif prefixes & {
+            "profile",
+            "medical_history",
+            "injury_history",
+            "function",
+            "asymmetry",
+            "body_composition",
+            "cardiovascular",
+            "respiratory",
+            "medication_and_exposure",
+            "laboratory_reports",
+            "reproductive_and_hormonal",
+        }:
+            number, label = 3, "About You"
+        elif prefixes & {"goals_and_constraints"}:
+            number, label = 4, "Goals"
+        else:
+            number, label = 5, "Lifestyle"
+        return {"number": number, "total": 6, "label": label}
+
+    @staticmethod
+    def _question_schemas(fitness, session, questions) -> dict[str, Any]:
+        schemas: dict[str, Any] = {}
+        spec = getattr(fitness, "spec", None)
+        if spec is None:
+            return schemas
+        for question in questions:
+            try:
+                _, _, field = spec.locate(session, question.field_path)
+            except Exception:
+                continue
+            if not field.type.startswith("record:"):
+                continue
+            record_name = field.type.split(":", 1)[1]
+            fields = []
+            for name, child in spec.records.get(record_name, {}).items():
+                kind, _, enum_name = child.type.partition(":")
+                if kind in {"refs", "record", "measurements"}:
+                    continue
+                options = {}
+                if kind in {"enum", "multi"}:
+                    options = {
+                        key: key.replace("_", " ").capitalize()
+                        for key in spec.enums.get(enum_name, [])
+                    }
+                fields.append(
+                    {
+                        "name": name,
+                        "label": name.replace("_", " ").capitalize(),
+                        "type": child.type,
+                        "unit": child.unit,
+                        "options": options,
+                    }
+                )
+            schemas[question.field_path] = {"record_name": record_name, "fields": fields}
+        return schemas
+
+    def submit_questionnaire_answers_for_user(
+        self,
+        user_id: str,
+        fitness_session_id: str,
+        answers: dict[str, Any],
+        *,
+        expected_version: int | None = None,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        self.assert_fitness_session_owner(user_id, fitness_session_id)
+        fitness = self._require_fitness()
+        try:
+            fitness.submit_answers(
+                fitness_session_id,
+                answers,
+                expected_version=expected_version,
+                request_id=request_id,
+            )
+        except Exception as exc:
+            raise self._fitness_error(exc) from None
+        return self.questionnaire_state_for_user(user_id, fitness_session_id)
 
     def update_fitness_consent_for_user(
         self,

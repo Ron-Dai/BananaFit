@@ -37,6 +37,16 @@ def test_configuration_rejects_unsafe_redirect():
         AccountSettings(app_url="javascript:alert(1)")
     with pytest.raises(ValidationError):
         AccountSettings(app_url="https://person:secret@example.com/")
+    with pytest.raises(ValidationError):
+        AccountSettings(questionnaire_url="//attacker.example/intake")
+    with pytest.raises(ValidationError):
+        AccountSettings(questionnaire_url="javascript:alert(1)")
+    with pytest.raises(ValidationError):
+        AccountSettings(questionnaire_url="/\\attacker.example/intake")
+    with pytest.raises(ValidationError):
+        AccountSettings(questionnaire_url="/intake#unexpected")
+
+    assert AccountSettings(questionnaire_url="/intake").questionnaire_url == "/intake"
 
 
 def test_origin_list_is_explicit_and_deduplicated():
