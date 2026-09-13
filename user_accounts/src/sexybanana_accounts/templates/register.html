@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create account · ForgeFit</title>
+  <link rel="stylesheet" href="/auth-static/auth.css">
+  <script src="/auth-static/auth.js" defer></script>
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="auth-card" aria-labelledby="page-title">
+      <a class="brand" href="/login" aria-label="ForgeFit sign in">
+        <span class="brand-mark" aria-hidden="true">ϟ</span>
+        <span>ForgeFit</span>
+      </a>
+      <header>
+        <h1 id="page-title">Create your account</h1>
+        <p>Keep your intake and two-week plans connected securely.</p>
+      </header>
+      <form data-auth-form="register" novalidate>
+        <div class="field">
+          <label for="email">Email address</label>
+          <input id="email" name="email" type="email" autocomplete="email" required
+                 placeholder="name@example.com">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="new-password"
+                 minlength="12" required aria-describedby="password-help">
+          <small id="password-help">Use at least 12 characters, including letters and numbers.</small>
+        </div>
+        <div class="field">
+          <label for="password-confirmation">Confirm password</label>
+          <input id="password-confirmation" name="password_confirmation" type="password"
+                 autocomplete="new-password" minlength="12" required>
+        </div>
+        <div class="form-message" data-form-message role="alert" aria-live="polite"></div>
+        <button class="primary" type="submit">Create account</button>
+      </form>
+      <p class="switch">Already have an account? <a href="/login">Sign in</a></p>
+    </section>
+  </main>
+</body>
+</html>
