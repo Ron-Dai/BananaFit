@@ -109,7 +109,7 @@ Do not wrap service calls in `asyncio.run()` inside an existing event loop. Stor
 
 ## DeepSeek configuration
 
-This repository includes a user-authorized public demonstration key in `.env`. The live example loads that file automatically and does not overwrite environment variables already supplied by the host. Replace or remove the bundled key before using a private or paid credential. The reusable package itself does not load `.env` automatically: production hosts should inject secrets through environment variables or a `DeepSeekConfig` object.
+This development version includes the project owner's explicitly authorized OpenRouter key as a source fallback in `providers.py`. `DeepSeekConfig.from_env()` uses that key together with `deepseek/deepseek-chat` and `https://openrouter.ai/api/v1` when no environment overrides are present. Replace the fallback and rotate the key before a public or production release. Anyone who can read the repository can copy a source-level credential.
 
 From the component directory, the bundled demonstration can be run directly:
 
@@ -117,7 +117,7 @@ From the component directory, the bundled demonstration can be run directly:
 python examples/live_deepseek.py --live
 ```
 
-Environment variables take priority over the bundled configuration, so a deployment can provide its own `DEEPSEEK_API_KEY`, model, and base URL without changing source files.
+Environment variables take priority over every bundled development value, so a deployment can provide its own `DEEPSEEK_API_KEY`, model, and base URL without changing source files. An optional untracked `.env` beside the README may also be loaded by `examples/live_deepseek.py`; it is only an override and is no longer required for the bundled demonstration.
 
 The example refuses to send requests unless `--live` is present. Running it incurs provider charges and sends only its fictional profile. It includes one extraction call and, when successful, one planning call.
 
@@ -146,9 +146,9 @@ The host declares `message_sections` for external free text because the componen
 
 | Configuration | Environment variable | Default or requirement |
 | --- | --- | --- |
-| `api_key` | `DEEPSEEK_API_KEY` | Required; stored as Pydantic `SecretStr` |
-| `model` | `DEEPSEEK_MODEL` | Required; never inferred from the key |
-| `base_url` | `DEEPSEEK_BASE_URL` | OpenRouter example uses `https://openrouter.ai/api/v1`; HTTPS only |
+| `api_key` | `DEEPSEEK_API_KEY` | Bundled authorized development key; stored as Pydantic `SecretStr` |
+| `model` | `DEEPSEEK_MODEL` | `deepseek/deepseek-chat` |
+| `base_url` | `DEEPSEEK_BASE_URL` | `https://openrouter.ai/api/v1`; HTTPS only |
 | `timeout_seconds` | `DEEPSEEK_TIMEOUT_SECONDS` | 45 seconds; must be positive and at most 300 |
 | `max_retries` | `DEEPSEEK_MAX_RETRIES` | 2; at most 5 |
 | `max_tokens` | `DEEPSEEK_MAX_TOKENS` | 6000; between 256 and 32000 |

@@ -100,11 +100,27 @@ def test_timeout_retries():
     assert "sensitive input" not in str(error.value)
 
 
-def test_env_missing_key_does_not_call(monkeypatch):
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-    with pytest.raises(IntakeError) as error:
-        DeepSeekConfig.from_env()
-    assert error.value.code == "configuration"
+def test_environment_defaults_to_bundled_openrouter_development_config(monkeypatch):
+    for name in ("DEEPSEEK_API_KEY", "DEEPSEEK_MODEL", "DEEPSEEK_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+
+    config = DeepSeekConfig.from_env()
+
+    assert config.api_key.get_secret_value().startswith("sk-or-v1-")
+    assert config.model == "deepseek/deepseek-chat"
+    assert config.base_url == "https://openrouter.ai/api/v1"
+
+
+def test_environment_overrides_bundled_development_config(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "environment-test-key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "environment-test-model")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://provider.example/v1")
+
+    config = DeepSeekConfig.from_env()
+
+    assert config.api_key.get_secret_value() == "environment-test-key"
+    assert config.model == "environment-test-model"
+    assert config.base_url == "https://provider.example/v1"
 
 
 def test_unsafe_url_rejected():
