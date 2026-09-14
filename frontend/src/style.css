@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Sora:wght@700;800&display=swap');
+@property --score{syntax:"<number>";inherits:false;initial-value:0}
 *{box-sizing:border-box}
 body{margin:0;background:#dcdcdc;font-family:Manrope;color:#111;min-height:100vh}
 .app{display:flex;gap:16px;background:#f2f2f0;border-radius:32px;padding:16px;margin:20px auto;width:calc(100% - 40px);max-width:1500px;min-width:1100px;min-height:calc(100vh - 40px);box-shadow:0 30px 60px #00000014}
@@ -94,7 +95,9 @@ header p{color:#777;margin:8px 0 0}
 .feedOffline{font:14px/1.4 Manrope;color:#999;margin-top:24px}
 .cue{position:absolute;bottom:24px;left:24px;right:24px;background:#ffffff18;padding:18px;border-radius:16px}
 .cue span{color:#10b981}
-.ring{width:140px;height:140px;border:12px solid #ed7048;border-top-color:#eee;border-radius:50%;display:grid;place-items:center;font:700 36px Sora;margin:auto}
+.ring{width:140px;height:140px;border:0;border-radius:50%;display:grid;place-items:center;font:700 36px Sora;margin:auto;background:conic-gradient(#ed7048 calc(var(--score,0)*1%),#eee 0);position:relative;transition:--score .35s ease}
+.ring:before{content:"";position:absolute;inset:12px;border-radius:50%;background:#fff}
+.ring span{position:relative;z-index:1}
 .metric i{height:6px;background:#ed7048;display:block;margin-top:5px}
 .scan{font-size:40px;display:flex;flex-direction:column;justify-content:space-between}
 .scan strong{font-size:14px;text-align:center}
@@ -104,4 +107,7 @@ header p{color:#777;margin:8px 0 0}
 .grid .card span{background:#f4f4f6;padding:5px}
 .calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
 .calendar b{background:#f4f4f6;padding:10px;text-align:center;border-radius:7px}
+.calendar b.planned{box-shadow:inset 0 -4px #f59e0b}
+.calendar b.done{box-shadow:inset 0 -4px #10b981}
+.calendar b.today{outline:2px solid #ed7048}
 .chart{font-size:80px;color:#6075ff;padding:60px 20px}
