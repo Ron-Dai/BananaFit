@@ -148,6 +148,7 @@ class PublicPlan(StrictModel):
     stale: bool
     start_date: str | None
     end_date: str | None
+    timezone: str | None
     objective: str
     summary: PlanSummary
     days: list[dict[str, Any]]
@@ -155,5 +156,5 @@ class PublicPlan(StrictModel):
 
 
 class CurrentPlanResponse(StrictModel):
-    status: Literal["available", "none", "stale"]
+    status: Literal["available", "none", "stale", "expired"]
     plan: PublicPlan | None

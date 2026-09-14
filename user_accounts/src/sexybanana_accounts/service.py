@@ -370,6 +370,8 @@ class AccountService:
             plan=plan,
             created_at=timestamp,
         )
+        if not plan.get("stale"):
+            self.database.mark_other_plans_stale(user_id, record_id)
         return record_id
 
     def generate_plan_for_user(self, user_id: str, fitness_session_id: str, **kwargs):
@@ -430,6 +432,11 @@ class AccountService:
                             "sets",
                             "repetitions",
                             "rpe",
+                            "rest_seconds_between_sets",
+                            "tempo_seconds_per_rep",
+                            "completion_rule",
+                            "load_type",
+                            "coaching_cues",
                             "equipment",
                             "instructions",
                         )
@@ -471,6 +478,7 @@ class AccountService:
             stale=bool(plan.get("stale")) or row["status"] == "stale",
             start_date=start,
             end_date=end,
+            timezone=plan.get("timezone"),
             objective=objective,
             summary={
                 "duration_days": len(safe_days),
@@ -499,7 +507,15 @@ class AccountService:
             return CurrentPlanResponse(status="none", plan=None)
         plan, completed = self._fresh_plan_and_feedback(row)
         public = self._public_plan(row, plan, completed)
-        return CurrentPlanResponse(status="stale" if public.stale else "available", plan=public)
+        if public.stale:
+            status = "stale"
+        elif public.end_date and datetime.now(timezone.utc).date() > datetime.fromisoformat(
+            public.end_date
+        ).date():
+            status = "expired"
+        else:
+            status = "available"
+        return CurrentPlanResponse(status=status, plan=public)
 
     def list_plans_for_user(self, user_id: str) -> list[PublicPlan]:
         result = []

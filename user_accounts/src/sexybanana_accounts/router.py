@@ -87,7 +87,11 @@ def _set_session_cookie(response: Response, settings: AccountSettings, token: st
 
 def _post_login_redirect(service: AccountService, user_id: str) -> str:
     current = service.get_current_plan_for_user(user_id)
-    return service.settings.questionnaire_url if current.status == "none" else service.settings.app_url
+    return (
+        service.settings.app_url
+        if current.status == "available"
+        else service.settings.questionnaire_url
+    )
 
 
 def create_router(service: AccountService) -> APIRouter:
@@ -207,6 +211,15 @@ def create_router(service: AccountService) -> APIRouter:
     def current_intake_session(request: Request) -> dict:
         principal = _principal(request, service)
         session_id = service.latest_fitness_session_for_user(principal.user.id)
+        current_plan = service.get_current_plan_for_user(principal.user.id)
+        if (
+            current_plan.status == "expired"
+            and current_plan.plan is not None
+            and session_id == current_plan.plan.fitness_session_id
+        ):
+            # The browser will create a new owned intake session through the existing
+            # CSRF-protected POST flow. The expired session remains immutable history.
+            return {"status": "none", "session": None}
         if session_id is None:
             return {"status": "none", "session": None}
         state = service.questionnaire_state_for_user(principal.user.id, session_id)
@@ -285,7 +298,7 @@ def create_router(service: AccountService) -> APIRouter:
             "status": result.status,
             "readiness": result.readiness.model_dump(),
             "current_plan": current.model_dump(),
-            "redirect_url": settings.app_url if current.status != "none" else None,
+            "redirect_url": settings.app_url if current.status == "available" else None,
         }
 
     @router.get("/api/intake/sessions/{fitness_session_id}")

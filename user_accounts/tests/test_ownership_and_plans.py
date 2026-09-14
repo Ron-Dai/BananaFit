@@ -69,6 +69,20 @@ def test_missing_and_stale_plan_states(app):
     assert service.get_current_plan_for_user(user.id).status == "stale"
 
 
+def test_expired_plan_requires_a_new_questionnaire(client, app):
+    service = _service(app)
+    assert register(client, "expired@example.com").status_code == 201
+    user_id = client.get("/api/auth/me").json()["user"]["id"]
+    session = service.create_fitness_session_for_user(user_id)
+    plan = sample_plan(session.session_id)
+    plan["start_date"] = "2020-01-01"
+    session.plans.append(plan)
+    service.save_plan_for_user(user_id, session.session_id, plan)
+
+    assert service.get_current_plan_for_user(user_id).status == "expired"
+    assert client.get("/api/intake/current").json() == {"status": "none", "session": None}
+
+
 def test_invalid_plan_is_rejected(app):
     service = _service(app)
     user = _new_user(service, "owner@example.com")

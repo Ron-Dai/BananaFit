@@ -296,6 +296,16 @@ class AccountDatabase:
                 return
             raise AccountError("database_failure", ERROR_MESSAGES["database_failure"], 500) from None
 
+    def mark_other_plans_stale(self, user_id: str, current_record_id: str) -> None:
+        """Keep old plans as history while making the newest plan authoritative."""
+        with self.transaction() as connection:
+            connection.execute(
+                "UPDATE workout_plans SET status='stale', "
+                "updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
+                "WHERE user_id=? AND id<>?",
+                (user_id, current_record_id),
+            )
+
     def plan_by_fitness_id(self, user_id: str, fitness_plan_id: str) -> sqlite3.Row | None:
         with self.read() as connection:
             return connection.execute(
