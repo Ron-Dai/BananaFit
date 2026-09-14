@@ -29,7 +29,15 @@ class PoseDetector:
         """Ensure the model file is downloaded and create the underlying PoseLandmarker."""
         _ensure_model()
         options = mp.tasks.vision.PoseLandmarkerOptions(
-            base_options=mp.tasks.BaseOptions(model_asset_path=_MODEL_PATH),
+            # MediaPipe's implicit delegate selection can attempt to construct a
+            # Metal graph on macOS even when inference later reports XNNPACK.
+            # In camera servers that graph may be created off the app's UI thread
+            # and abort the entire process. The CPU delegate is supported on all
+            # target platforms and keeps browser-uploaded frame processing stable.
+            base_options=mp.tasks.BaseOptions(
+                model_asset_path=_MODEL_PATH,
+                delegate=mp.tasks.BaseOptions.Delegate.CPU,
+            ),
             running_mode=mp.tasks.vision.RunningMode.IMAGE,
         )
         self._landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(options)
